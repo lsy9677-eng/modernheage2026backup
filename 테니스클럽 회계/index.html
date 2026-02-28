@@ -896,6 +896,24 @@ th:first-child, td:first-child {
             <div style="margin-bottom:10px;"><label style="font-size:0.8rem;">부부(남)</label><input type="number" id="fee_cpl_m"></div>
             <div style="margin-bottom:10px;"><label style="font-size:0.8rem;">부부(여)</label><input type="number" id="fee_cpl_f"></div>
             <div style="margin-bottom:10px;"><label style="font-size:0.8rem;">휴회 / 탈회 (고정 0원)</label><input type="number" value="0" disabled style="background:#eee;"></div>
+            
+<hr style="border:none; border-top:1px dashed #ccc; margin:15px 0;">
+<h3 style="margin:0 0 10px 0;">📩 자동 문자 발송</h3>
+
+<label style="display:flex; align-items:center; gap:8px; font-weight:bold; margin-bottom:8px;">
+  <input type="checkbox" id="sms_enabled" style="width:18px; height:18px;">
+  회비/찬조 등록 시 자동 문자 발송 사용
+</label>
+
+<label style="font-size:0.8rem; color:#666;">회비 문자 템플릿</label>
+<textarea id="sms_tpl_dues" style="width:100%; height:90px; padding:10px; border-radius:12px; border:1px solid #ddd; margin-bottom:10px;"></textarea>
+
+<label style="font-size:0.8rem; color:#666;">찬조 문자 템플릿</label>
+<textarea id="sms_tpl_don" style="width:100%; height:90px; padding:10px; border-radius:12px; border:1px solid #ddd;"></textarea>
+
+<div style="font-size:0.75rem; color:#999; margin-top:8px;">
+  사용가능 변수: {NAME}, {MONTHS}, {AMOUNT}
+</div>
             <div style="display:flex; gap:10px;">
 <div style="margin-bottom:15px; border-top:1px dashed #ccc; padding-top:15px; margin-top:15px;">
     <label style="font-size:0.85rem; font-weight:bold; color:#2d3436;">🏦 입금 계좌 정보 (은행 계좌 예금주)</label>
@@ -960,6 +978,107 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from
     // ✅ 앱별 데이터 분리 (회계앱 전용 네임스페이스)
     const BASE_PATH = ''; // 🚑 긴급복구: 기존(공용) 경로 사용
 const CLUB_ROOT = 'clubData';
+
+
+// ================================
+// ✅ 자동 문자(서버 발송용 Queue 적재)
+// - addTrans로 '월회비'/'찬조금' 수입 등록 시
+// - 회원명부에서 번호를 찾아 CLUB_ROOT/smsQueue 에 적재
+//   (Cloud Functions 등 서버가 smsQueue를 읽어 실제 발송)
+// ================================
+function getSmsSettings(){
+  if(!window.settings) window.settings = {};
+  if(!window.settings.sms){
+    window.settings.sms = {
+      enabled: false,
+      senderName: "모던테니스클럽",
+      templateDues: "[모던 테니스 클럽]\n{NAME}님 {MONTHS} 회비 {AMOUNT} 납부 확인되었습니다. 감사합니다. 🎾",
+      templateDonation: "[모던 테니스 클럽]\n{NAME}님 찬조 {AMOUNT} 입금 감사합니다. 🙏\n- 모던테니스클럽 -"
+    };
+  }
+  return window.settings.sms;
+}
+
+function normalizePhone(p){
+  if(!p) return "";
+  return String(p).replace(/[^0-9]/g,'').trim(); // 01012345678
+}
+
+function fillTemplate(tpl, vars){
+  return String(tpl || "")
+    .replaceAll("{NAME}", vars.NAME ?? "")
+    .replaceAll("{MONTHS}", vars.MONTHS ?? "")
+    .replaceAll("{AMOUNT}", vars.AMOUNT ?? "");
+}
+
+function formatKrw(amt){
+  const n = Number(amt||0);
+  return n.toLocaleString() + "원";
+}
+
+function parseMonthsFromDesc(desc){
+  if(!desc) return "";
+  const range = desc.match(/(\d{1,2})\s*[~-]\s*(\d{1,2})\s*월/);
+  if(range){
+    const s = parseInt(range[1],10), e = parseInt(range[2],10);
+    if(!isNaN(s) && !isNaN(e)) return `${s}~${e}월`;
+  }
+  const single = desc.match(/(\d{1,2})\s*월/);
+  if(single){
+    const m = parseInt(single[1],10);
+    if(!isNaN(m)) return `${m}월`;
+  }
+  return "";
+}
+
+// desc에 포함된 이름으로 회원 찾기(긴 이름 우선)
+function findMemberFromDesc(desc){
+  if(!desc || !window.members) return null;
+  const sorted = [...window.members].filter(m => m && m.name).sort((a,b)=> (b.name||"").length - (a.name||"").length);
+  return sorted.find(m => desc.includes(m.name)) || null;
+}
+
+async function enqueueAutoSms({ transId, cat, amt, desc, date }){
+  const sms = getSmsSettings();
+  if(!sms.enabled) return;
+  if(!window.isAdmin) return;
+
+  // 대상: 월회비/찬조금만
+  if(!(cat === "월회비" || cat === "찬조금")) return;
+
+  const member = findMemberFromDesc(desc);
+  if(!member) return;
+
+  const to = normalizePhone(member.phone);
+  if(!to) return;
+
+  const months = (cat === "월회비") ? (parseMonthsFromDesc(desc) || "회비") : "";
+  const vars = { NAME: member.name, MONTHS: months, AMOUNT: formatKrw(amt) };
+  const body = (cat === "찬조금")
+    ? fillTemplate(sms.templateDonation, vars)
+    : fillTemplate(sms.templateDues, vars);
+
+  const key = `${transId}_${member.id || member.name}`;
+  const queueItem = {
+    key,
+    transId,
+    memberId: member.id || null,
+    memberName: member.name,
+    to,
+    cat,
+    amount: amt,
+    months,
+    date: date || null,
+    body,
+    createdAt: new Date().toISOString(),
+    status: "queued"
+  };
+
+  const updates = {};
+  updates[`${CLUB_ROOT}/smsQueue/${key}`] = queueItem;
+  await update(ref(db), updates);
+}
+
 
 
 
@@ -1306,8 +1425,13 @@ window.saveAndExit = () => {
                 }
             }
         }
-        window.trans.unshift({ id:Date.now(), date, type, cat, amt, desc });
+        const newTransId = Date.now();
+        window.trans.unshift({ id:newTransId, date, type, cat, amt, desc });
         saveToFirebase();
+        // ✅ 자동 문자 Queue 적재(설정 ON + 월회비/찬조금 수입)
+        if(type === 'income' && (cat === '월회비' || cat === '찬조금')) {
+            enqueueAutoSms({ transId: newTransId, cat, amt, desc, date }).catch(console.warn);
+        }
         const btn = document.getElementById('btnAdd'); btn.innerText = "저장 완료!"; btn.classList.add('saved');
         setTimeout(() => { btn.innerText = "입력 완료"; btn.classList.remove('saved'); }, 1000);
         document.getElementById('tAmt').value=''; document.getElementById('tDesc').value='';
@@ -1856,6 +1980,14 @@ if (window.excludeInactive) {
         
         // ▼▼▼ [추가된 부분] 계좌번호 불러오기 ▼▼▼
         document.getElementById('setting_bankAccount').value = (window.settings && window.settings.bankAccount) ? window.settings.bankAccount : '';
+// ▼▼▼ [추가] 자동 문자 설정 불러오기 ▼▼▼
+const sms = getSmsSettings();
+const elEnabled = document.getElementById('sms_enabled');
+const elTplDues = document.getElementById('sms_tpl_dues');
+const elTplDon = document.getElementById('sms_tpl_don');
+if(elEnabled) elEnabled.checked = !!sms.enabled;
+if(elTplDues) elTplDues.value = sms.templateDues || "";
+if(elTplDon) elTplDon.value = sms.templateDonation || "";
     }
 
 window.saveFeeSettings = () => {
@@ -1872,6 +2004,15 @@ window.saveFeeSettings = () => {
         
         // ▼▼▼ [추가된 부분] 계좌번호 저장하기 ▼▼▼
         window.settings.bankAccount = document.getElementById('setting_bankAccount').value;
+// ▼▼▼ [추가] 자동 문자 설정 저장 ▼▼▼
+const sms = getSmsSettings();
+const elEnabled = document.getElementById('sms_enabled');
+const elTplDues = document.getElementById('sms_tpl_dues');
+const elTplDon = document.getElementById('sms_tpl_don');
+sms.enabled = elEnabled ? !!elEnabled.checked : !!sms.enabled;
+sms.templateDues = elTplDues && elTplDues.value ? elTplDues.value : sms.templateDues;
+sms.templateDonation = elTplDon && elTplDon.value ? elTplDon.value : sms.templateDonation;
+window.settings.sms = sms;
 
         saveToFirebase(); 
         document.getElementById('feeSettingsModal').style.display='none'; 
