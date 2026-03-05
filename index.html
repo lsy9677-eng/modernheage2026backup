@@ -888,47 +888,81 @@ th:first-child, td:first-child {
             <button class="btn-main" id="btnCloseMemView" onclick="closeModal()" style="display:none; background:#eee; color:#333;">닫기</button>
         </div>
     </div>
+    
     <div class="modal-wrap" id="feeSettingsModal">
         <div class="modal">
-            <h3>⚙️ 월 회비 설정</h3>
-            <div style="margin-bottom:10px;"><label style="font-size:0.8rem;">남성</label><input type="number" id="fee_reg"></div>
-            <div style="margin-bottom:10px;"><label style="font-size:0.8rem;">여성</label><input type="number" id="fee_fem"></div>
-            <div style="margin-bottom:10px;"><label style="font-size:0.8rem;">부부(남)</label><input type="number" id="fee_cpl_m"></div>
-            <div style="margin-bottom:10px;"><label style="font-size:0.8rem;">부부(여)</label><input type="number" id="fee_cpl_f"></div>
-            <div style="margin-bottom:10px;"><label style="font-size:0.8rem;">휴회 / 탈회 (고정 0원)</label><input type="number" value="0" disabled style="background:#eee;"></div>
+            <h3 style="margin:0 0 14px 0;">⚙️ 월 회비 설정</h3>
+
+            <div class="card" style="padding:14px; margin-bottom:14px;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <div>
+                        <label style="font-size:0.8rem; font-weight:700; color:#555;">남성</label>
+                        <input type="number" id="fee_reg" inputmode="numeric">
+                    </div>
+                    <div>
+                        <label style="font-size:0.8rem; font-weight:700; color:#555;">여성</label>
+                        <input type="number" id="fee_fem" inputmode="numeric">
+                    </div>
+                    <div>
+                        <label style="font-size:0.8rem; font-weight:700; color:#555;">부부(남)</label>
+                        <input type="number" id="fee_cpl_m" inputmode="numeric">
+                    </div>
+                    <div>
+                        <label style="font-size:0.8rem; font-weight:700; color:#555;">부부(여)</label>
+                        <input type="number" id="fee_cpl_f" inputmode="numeric">
+                    </div>
+                </div>
+
+                <div style="margin-top:10px;">
+                    <label style="font-size:0.8rem; font-weight:700; color:#555;">휴회 / 탈회 (고정 0원)</label>
+                    <input type="number" value="0" disabled style="background:#eee;">
+                </div>
+            </div>
+
+            <div class="card" style="padding:14px; margin-bottom:14px;">
+                <div style="font-size:0.9rem; font-weight:900; color:#2d3436; margin-bottom:10px;">🏦 입금 계좌 정보</div>
+                <input type="text" id="setting_bankAccount" placeholder="예: 카카오뱅크 3333-00-0000000 홍길동" style="margin-bottom:6px;">
+                <div style="font-size:0.75rem; color:#888; line-height:1.35;">
+                    * 입력하면 메인화면 상단에 표시됩니다. (터치하면 복사)
+                </div>
+            </div>
+
+            <div class="card" style="padding:14px; margin-bottom:14px;">
+                <div style="font-size:0.9rem; font-weight:900; color:#2d3436; margin-bottom:10px;">📩 문자 알림 (작성창 자동 열기)</div>
+
+                <label style="display:flex; align-items:flex-start; gap:10px; font-weight:800; line-height:1.2;">
+                    <input type="checkbox" id="sms_enabled" style="width:18px; height:18px; margin-top:2px;">
+                    <div>
+                        회비/찬조 장부 등록 시, 해당 회원에게<br>
+                        <span style="color:#00b894;">문자 작성창</span>을 자동으로 열기
+                        <div style="font-size:0.75rem; color:#777; font-weight:600; margin-top:6px;">
+                            * 자동 “발송”이 아니라, 휴대폰 문자앱에서 내용 확인 후 직접 보내는 방식입니다.
+                        </div>
+                    </div>
+                </label>
+
+                <div style="margin-top:12px;">
+                    <label style="font-size:0.8rem; color:#666; font-weight:800; display:block; margin-bottom:6px;">회비 문자 템플릿</label>
+                    <textarea id="sms_tpl_dues" style="width:100%; height:90px; padding:10px; border-radius:12px; border:1px solid #ddd;"></textarea>
+                </div>
+
+                <div style="margin-top:12px;">
+                    <label style="font-size:0.8rem; color:#666; font-weight:800; display:block; margin-bottom:6px;">찬조 문자 템플릿</label>
+                    <textarea id="sms_tpl_don" style="width:100%; height:90px; padding:10px; border-radius:12px; border:1px solid #ddd;"></textarea>
+                </div>
+
+                <div style="font-size:0.75rem; color:#999; margin-top:10px;">
+                    사용가능 변수: <b>{NAME}</b>, <b>{MONTHS}</b>, <b>{AMOUNT}</b>
+                </div>
+            </div>
+
             <div style="display:flex; gap:10px;">
-<div style="margin-bottom:15px; border-top:1px dashed #ccc; padding-top:15px; margin-top:15px;">
-    <label style="font-size:0.85rem; font-weight:bold; color:#2d3436;">🏦 입금 계좌 정보 (은행 계좌 예금주)</label>
-    <input type="text" id="setting_bankAccount" placeholder="예: 카카오뱅크 3333-00-0000000 홍길동" style="margin-bottom:0;">
-    <p style="font-size:0.75rem; color:#999; margin-top:5px;">* 입력하면 메인화면 상단에 표시됩니다.</p>
-</div>
-                
-<hr style="border:none; border-top:1px dashed #ccc; margin:15px 0;">
-<h3 style="margin:0 0 10px 0;">📩 문자 알림(작성창 열기)</h3>
-
-<label style="display:flex; align-items:center; gap:8px; font-weight:bold;">
-  <input type="checkbox" id="sms_enabled" style="width:18px; height:18px;">
-  회비/찬조 장부 등록 시, 해당 회원에게 문자 작성창 자동 열기
-</label>
-<div style="font-size:0.75rem; color:#777; margin-top:6px; line-height:1.3;">
-  * 자동 “발송”이 아니라, <b>휴대폰 문자앱</b>에서 내용 확인 후 <b>직접 보내는</b> 방식입니다.
-</div>
-
-<label style="font-size:0.8rem; color:#666; margin-top:10px; display:block;">회비 문자 템플릿</label>
-<textarea id="sms_tpl_dues" style="width:100%; height:90px; padding:10px; border-radius:12px; border:1px solid #ddd;"></textarea>
-
-<label style="font-size:0.8rem; color:#666; margin-top:10px; display:block;">찬조 문자 템플릿</label>
-<textarea id="sms_tpl_don" style="width:100%; height:90px; padding:10px; border-radius:12px; border:1px solid #ddd;"></textarea>
-
-<div style="font-size:0.75rem; color:#999; margin-top:8px;">
-  사용가능 변수: {NAME}, {MONTHS}, {AMOUNT}
-</div>
-
-<button class="btn-main" onclick="saveFeeSettings()">저장</button>
+                <button class="btn-main" onclick="saveFeeSettings()">저장</button>
                 <button class="btn-main" style="background:#eee; color:#333;" onclick="document.getElementById('feeSettingsModal').style.display='none'">취소</button>
             </div>
         </div>
     </div>
+
     <div class="modal-wrap" id="imgModal">
         <div class="modal" style="background:transparent; box-shadow:none; text-align:center;">
             <img id="bigImg" src="" style="max-width:100%; max-height:80vh; border-radius:10px; background:white;">
@@ -1323,6 +1357,16 @@ window.saveAndExit = () => {
         return String(p).replace(/[^0-9]/g,'').trim();
     }
 
+    function formatPhoneKR(input){
+        const p = String(input||'').replace(/[^0-9]/g,'').trim();
+        if(!p) return '';
+        if(p.length === 11 && p.startsWith('010')) return p.replace(/(010)(\d{4})(\d{4})/, '$1-$2-$3');
+        if(p.length === 10 && p.startsWith('01')) return p.replace(/(01\d)(\d{3})(\d{4})/, '$1-$2-$3');
+        if(p.length === 10 && p.startsWith('0')) return p.replace(/(0\d{2})(\d{3})(\d{4})/, '$1-$2-$3');
+        if(p.length === 11 && p.startsWith('0')) return p.replace(/(0\d{2})(\d{4})(\d{4})/, '$1-$2-$3');
+        return p;
+    }
+
     function formatKrw(amt){
         const n = Number(amt||0);
         return n.toLocaleString() + "원";
@@ -1394,7 +1438,12 @@ window.saveAndExit = () => {
             return;
         }
         const phone = normalizePhone(member.phone);
-        if(!phone) return;
+        if(!phone) {
+            alert(`📵 ${member.name} 회원의 전화번호가 없습니다.\n\n회원 정보에서 연락처를 저장하면 회비 등록 시 문자창이 자동으로 열립니다.`);
+            try { goTab('members'); } catch(e) {}
+            try { openModal(String(member.id||''), String(member.name||'')); } catch(e) {}
+            return;
+        }
 
         const months = (cat === "월회비") ? (parseMonthsFromDesc(desc) || "회비") : "";
         const vars = { NAME: member.name, MONTHS: months, AMOUNT: formatKrw(amt) };
@@ -1712,11 +1761,13 @@ function checkRoleMatch(memberRole, groupKey) {
             const unpaidInfo = getUnpaidInfo(m);
             const paidMonths = (m.paid || []).filter(Boolean).length;
             const unpaidMonthsText = unpaidInfo.months.length > 0 ? `미납: ${unpaidInfo.months.join(', ')}` : '미납 없음';
+            const hasPhone = !!normalizePhone(m.phone);
+            const phoneBadge = hasPhone ? '' : `<span style="font-size:0.7rem; font-weight:800; color:#d63031; background:#fff0f1; border:1px solid #ffcdd2; padding:2px 8px; border-radius:999px;">📵 번호없음</span>`;
             return `<div class="autocomplete-item" data-name="${m.name}" data-fee="${fee}" data-status="${m.status}" onmousedown="selectAcItem(this)">
                 <div style="display:flex; flex-direction:column; gap:2px; flex:1;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <span class="ac-name">${m.name}</span>
-                        <span class="ac-fee">${m.status} · 월 ${fee.toLocaleString()}원</span>
+                        <span class="ac-fee">${m.status} · 월 ${fee.toLocaleString()}원</span> ${phoneBadge}
                     </div>
                     <div style="display:flex; justify-content:space-between; font-size:0.72rem; color:#636e72;">
                         <span>납부 <b style="color:#0984e3;">${sums.dues.toLocaleString()}원</b> (${paidMonths}개월)</span>
@@ -3065,7 +3116,8 @@ window.uploadReceipt = async () => {
         const name = document.getElementById('editName').value; 
 const birthday = document.getElementById('editBirthday').value;        
 const role = document.getElementById('editRole').value; 
-        const phone = document.getElementById('editPhone').value; 
+        const rawPhone = document.getElementById('editPhone').value; 
+        const phone = formatPhoneKR(rawPhone);
         const status = document.getElementById('editStatus').value; 
         const spouse = document.getElementById('editSpouse').value; 
         
