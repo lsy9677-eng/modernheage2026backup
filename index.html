@@ -880,6 +880,8 @@ th:first-child, td:first-child {
             <input type="text" id="editSpouse" placeholder="배우자 이름">
 <label style="font-size:0.75rem; color:#888;">생일 (연도-월-일)</label>
 <input type="date" id="editBirthday" style="margin-bottom:10px;">
+<label style="font-size:0.75rem; color:#888;">가입/복귀일 (연도-월-일)</label>
+<input type="date" id="editJoinDate" style="margin-bottom:10px;">
             <div id="adminMemBtns" class="admin-flex" style="gap:10px;">
                 <button class="btn-main" onclick="saveMember()">저장</button>
                 <button class="btn-main" style="background:#eee; color:#333;" onclick="closeModal()">취소(닫기)</button>
@@ -2012,17 +2014,33 @@ if (window.excludeInactive) {
         return { dues, donation }; 
     }
     
-    window.getUnpaidInfo = (m) => {
+ window.getUnpaidInfo = (m) => {
         if(EXCLUDED_STATUSES.includes(m.status)) return { amount:0, months:[] };
         if(m.role === '총무') return { amount:0, months:[] };
+        
         let startCheckMonth = 0; 
-        const joinTrans = window.trans.find(t => t.cat === '가입비' && t.desc.includes(m.name));
-        if(joinTrans) startCheckMonth = parseInt(joinTrans.date.split('-')[1]); 
+        
+        // ✅ 1. 가입/복귀일자가 설정되어 있으면 그 달부터 계산
+        if (m.joinDate && m.joinDate.trim() !== '') {
+            startCheckMonth = parseInt(m.joinDate.split('-')[1], 10) - 1; // 해당 월(Month) 추출
+        } else {
+            // ✅ 2. 가입일자가 없으면 기존처럼 장부의 '가입비' 납부 내역으로 유추
+            const joinTrans = window.trans.find(t => t.cat === '가입비' && t.desc.includes(m.name));
+            if(joinTrans) startCheckMonth = parseInt(joinTrans.date.split('-')[1], 10) - 1; 
+        }
+
+        // 월 인덱스 안전 장치 (0=1월, 11=12월)
+        if (isNaN(startCheckMonth) || startCheckMonth < 0) startCheckMonth = 0;
+        if (startCheckMonth > 11) startCheckMonth = 11;
+        
         let count=0, months=[];
         const currentMonthIdx = new Date().getMonth(); 
+        
+        // 가입한 달(startCheckMonth)부터 현재 달 이전(currentMonthIdx)까지 반복하며 미납 체크
         for(let i=startCheckMonth; i < currentMonthIdx; i++) { 
             if(!m.paid[i]) { count++; months.push((i+1)+'월'); } 
         }
+        
         let monthlyFee = currentFees[m.status] || 0;
         return { amount: count * monthlyFee, months };
     }
@@ -3086,12 +3104,14 @@ window.uploadReceipt = async () => {
         document.getElementById('editStatus').value = m.status || '남성';
         document.getElementById('editSpouse').value = m.spouse || '';
 
-        // [수정 핵심] 날짜 형식이 YYYY-MM-DD 인지 확인하고, 아니라면 변환 시도
-        let safeBirth = m.birthday || '';
-        // 만약 2024.01.01 처럼 점(.)이 있다면 대시(-)로 변경
+       let safeBirth = m.birthday || '';
         if(safeBirth.includes('.')) safeBirth = safeBirth.replace(/\./g, '-');
-        
         document.getElementById('editBirthday').value = safeBirth;
+        
+        // ✅ 가입일자 불러오기 로직 추가
+        let safeJoin = m.joinDate || '';
+        if(safeJoin.includes('.')) safeJoin = safeJoin.replace(/\./g, '-');
+        document.getElementById('editJoinDate').value = safeJoin;
 
     } else {
         // 신규 추가 모드
@@ -3104,18 +3124,20 @@ window.uploadReceipt = async () => {
         document.getElementById('editStatus').value = '남성';
         document.getElementById('editSpouse').value = '';
         document.getElementById('editBirthday').value = '';
+        document.getElementById('editJoinDate').value = ''; // ✅ 신규 추가 시 빈칸으로
     }
 }
 
     window.closeModal = () => document.getElementById('memModal').style.display='none';
     
     // --- 회원 저장 (수정/추가 공용) ---
-    window.saveMember = () => { 
+  window.saveMember = () => { 
         if(!window.isAdmin) return; 
         const id = document.getElementById('editId').value; 
         const name = document.getElementById('editName').value; 
-const birthday = document.getElementById('editBirthday').value;        
-const role = document.getElementById('editRole').value; 
+        const birthday = document.getElementById('editBirthday').value;        
+        const joinDate = document.getElementById('editJoinDate').value; // ✅ 추가됨
+        const role = document.getElementById('editRole').value; 
         const rawPhone = document.getElementById('editPhone').value; 
         const phone = formatPhoneKR(rawPhone);
         const status = document.getElementById('editStatus').value; 
@@ -3126,15 +3148,15 @@ const role = document.getElementById('editRole').value;
 
         if(m){
             // 기존 회원 수정
-             m.role=role; m.phone=phone; m.status=status; m.spouse=spouse; m.name=name; m.birthday=birthday;
-            if(!m.id) m.id = Date.now(); // ID가 없던 회원에게 신규 ID 부여
+            m.role=role; m.phone=phone; m.status=status; m.spouse=spouse; m.name=name; m.birthday=birthday;
+            m.joinDate=joinDate; // ✅ 추가됨
+            if(!m.id) m.id = Date.now();
         } else {
             // 신규 회원 추가
-            window.members.push({id:Date.now(), name, birthday, role, phone, status, spouse, paid:Array(12).fill(false)});
-    }
+            window.members.push({id:Date.now(), name, birthday, joinDate, role, phone, status, spouse, paid:Array(12).fill(false)}); // ✅ joinDate 추가됨
+        }
         saveToFirebase().then(() => { renderAll(); closeModal(); });
     }
-
     // --- 회원 삭제 (ID와 이름을 동시에 체크하여 확실히 삭제) ---
     window.delMember = () => { 
         if(!window.isAdmin) return; 
