@@ -1374,6 +1374,89 @@ window.saveAndExit = () => {
         return n.toLocaleString() + "원";
     }
 
+    function getMemberStableId(m){
+        if (!m) return '';
+        return String(m.id ?? '').trim();
+    }
+
+    function normalizeMemberName(name){
+        return String(name || '').replace(/\s+/g, '').trim().toLowerCase();
+    }
+
+    function getMemberMatchScore(desc, member){
+        if (!desc || !member || !member.name) return -1;
+        const rawDesc = String(desc);
+        const rawName = String(member.name);
+        let score = -1;
+        if (rawDesc.includes(rawName)) score = Math.max(score, rawName.length * 10);
+        const compactDesc = rawDesc.replace(/\s+/g, '').toLowerCase();
+        const compactName = normalizeMemberName(rawName);
+        if (compactName && compactDesc.includes(compactName)) score = Math.max(score, compactName.length * 8);
+        return score;
+    }
+
+    function resolveMemberFromTrans(trans){
+        if (!trans) return null;
+        const mid = String(trans.memberId || '').trim();
+        if (mid) {
+            const byId = (window.members || []).find(m => String(m.id) === mid);
+            if (byId) return byId;
+        }
+        const desc = String(trans.desc || '');
+        let best = null;
+        let bestScore = -1;
+        (window.members || []).forEach(m => {
+            const score = getMemberMatchScore(desc, m);
+            if (score > bestScore) {
+                best = m;
+                bestScore = score;
+            }
+        });
+        return best;
+    }
+
+    function transMatchesMember(trans, member){
+        if (!trans || !member) return false;
+        const mid = String(trans.memberId || '').trim();
+        if (mid && String(member.id) === mid) return true;
+        const matched = resolveMemberFromTrans(trans);
+        if (!matched) return false;
+        if (member.id != null && matched.id != null) return String(matched.id) === String(member.id);
+        return normalizeMemberName(matched.name) === normalizeMemberName(member.name);
+    }
+
+    function extractPaidMonthIndexes(trans){
+        const result = [];
+        if (!trans || trans.type !== 'income') return result;
+
+        if (trans.cat === '가입비') {
+            const dateMonth = parseInt(String(trans.date || '').split('-')[1], 10);
+            const idx = dateMonth - 1;
+            if (idx >= 0 && idx < 12) result.push(idx);
+            return result;
+        }
+
+        if (trans.cat !== '월회비') return result;
+
+        const desc = String(trans.desc || '');
+        const rangeMatch = desc.match(/(\d+)\s*[~-]\s*(\d+)\s*월/);
+        if (rangeMatch) {
+            const start = parseInt(rangeMatch[1], 10);
+            const end = parseInt(rangeMatch[2], 10);
+            if (start >= 1 && end <= 12 && start <= end) {
+                for (let i = start - 1; i < end; i++) result.push(i);
+                return result;
+            }
+        }
+
+        const monthMatches = [...desc.matchAll(/(\d+)\s*월/g)];
+        monthMatches.forEach(match => {
+            const idx = parseInt(match[1], 10) - 1;
+            if (idx >= 0 && idx < 12 && !result.includes(idx)) result.push(idx);
+        });
+        return result;
+    }
+
     function fillTemplate(tpl, vars){
         return String(tpl||"")
             .replaceAll("{NAME}", vars.NAME ?? "")
@@ -1381,11 +1464,13 @@ window.saveAndExit = () => {
             .replaceAll("{AMOUNT}", vars.AMOUNT ?? "");
     }
 
-    // desc에 포함된 회원 이름으로 회원 찾기 (긴 이름 우선)
-    function findMemberFromDesc(desc){
-        if(!desc) return null;
-        const sorted = [...(window.members||[])].sort((a,b)=> (b.name||"").length - (a.name||"").length);
-        return sorted.find(m => m && m.name && desc.includes(m.name)) || null;
+    // desc / memberId 기준으로 회원 찾기
+    function findMemberFromDesc(desc, explicitMemberId){
+        if (explicitMemberId) {
+            const byId = (window.members || []).find(m => String(m.id) === String(explicitMemberId));
+            if (byId) return byId;
+        }
+        return resolveMemberFromTrans({ desc, memberId: explicitMemberId });
     }
 
     // "1~3월" / "1-3월" / "2월" 등 추출
@@ -1467,26 +1552,21 @@ window.addTrans = () => {
         const desc = document.getElementById('tDesc').value.trim();
         if(!date || !amt) return alert('금액 입력하세요.');
 
-        const transMonth = parseInt(date.split('-')[1]); 
-        if(type === 'income' && cat === '가입비') {
-            const mIdx = transMonth - 1;
-            if(mIdx >= 0 && mIdx < 12) window.members.forEach(m => { if(desc.includes(m.name)) m.paid[mIdx] = true; });
-        }
-        if(type === 'income' && cat === '월회비' && desc) {
-            const rangeMatch = desc.match(/(\d+)[~-](\d+)월/);
-            if(rangeMatch) {
-                const start = parseInt(rangeMatch[1]); const end = parseInt(rangeMatch[2]);
-                if(start>=1 && end<=12 && start<=end) window.members.forEach(m => { if(desc.includes(m.name)) for(let i=start-1; i<end; i++) m.paid[i]=true; });
-            } else {
-                const mMatch = desc.match(/(\d+)월/);
-                if(mMatch) {
-                    const idx = parseInt(mMatch[1])-1;
-                    if(idx>=0 && idx<12) window.members.forEach(m=>{ if(desc.includes(m.name)) m.paid[idx]=true; });
-                }
-            }
-        }
+        const matchedMember = (type === 'income' && ['가입비','월회비','찬조금'].includes(cat))
+            ? findMemberFromDesc(desc)
+            : null;
+
         const newId = Date.now();
-        window.trans.unshift({ id:newId, date, type, cat, amt, desc });
+        window.trans.unshift({
+            id:newId,
+            date,
+            type,
+            cat,
+            amt,
+            desc,
+            memberId: matchedMember ? String(matchedMember.id ?? '') : '',
+            memberNameSnapshot: matchedMember ? String(matchedMember.name || '') : ''
+        });
         saveToFirebase();
         // ✅ 문자 작성창 자동 열기 (설정 ON + 월회비/찬조금 수입일 때)
         maybeComposeSmsForTrans({ type, cat, amt, desc }).catch(console.warn);
@@ -1621,25 +1701,13 @@ window.renderLedger = () => {
     function syncPaymentsFromLedger() {
         window.members.forEach(m => { m.paid = Array(12).fill(false); });
         window.trans.forEach(t => {
-            if (t.type !== 'income') return; 
-            if (t.cat === '가입비') {
-                const dateMonth = parseInt(t.date.split('-')[1]); 
-                const mIdx = dateMonth - 1;
-                if (mIdx >= 0 && mIdx < 12) window.members.forEach(m => { if (t.desc.includes(m.name)) m.paid[mIdx] = true; });
-            }
-            if (t.cat === '월회비') {
-                const rangeMatch = t.desc.match(/(\d+)[~-](\d+)월/);
-                if (rangeMatch) {
-                    const start = parseInt(rangeMatch[1]); const end = parseInt(rangeMatch[2]);
-                    if (start >= 1 && end <= 12 && start <= end) window.members.forEach(m => { if (t.desc.includes(m.name)) { for (let i = start - 1; i < end; i++) m.paid[i] = true; } });
-                } else {
-                    const monthMatch = t.desc.match(/(\d+)월/);
-                    if (monthMatch) {
-                        const idx = parseInt(monthMatch[1]) - 1;
-                        if (idx >= 0 && idx < 12) window.members.forEach(m => { if (t.desc.includes(m.name)) m.paid[idx] = true; });
-                    }
-                }
-            }
+            if (t.type !== 'income') return;
+            const member = resolveMemberFromTrans(t);
+            if (!member) return;
+            const indexes = extractPaidMonthIndexes(t);
+            indexes.forEach(idx => {
+                if (idx >= 0 && idx < 12) member.paid[idx] = true;
+            });
         });
     }
 
@@ -1759,7 +1827,7 @@ function checkRoleMatch(memberRole, groupKey) {
 
         list.innerHTML = filtered.map((m, i) => {
             const fee = currentFees[m.status] || 0;
-            const sums = getMemberSums(m.name);
+            const sums = getMemberSums(m);
             const unpaidInfo = getUnpaidInfo(m);
             const paidMonths = (m.paid || []).filter(Boolean).length;
             const unpaidMonthsText = unpaidInfo.months.length > 0 ? `미납: ${unpaidInfo.months.join(', ')}` : '미납 없음';
@@ -1889,9 +1957,9 @@ if (window.excludeInactive) {
 
             // 2. 기존 정렬 로직 (이름, 납부액, 미납액 등)
             if(k === 'name') return window.sortState.order==='asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
-            if(k === 'dues') { vA=getMemberSums(a.name).dues; vB=getMemberSums(b.name).dues; }
+            if(k === 'dues') { vA=getMemberSums(a).dues; vB=getMemberSums(b).dues; }
             if(k === 'unpaid') { vA=getUnpaidInfo(a).amount; vB=getUnpaidInfo(b).amount; }
-            if(k === 'don') { vA=getMemberSums(a.name).donation; vB=getMemberSums(b.name).donation; }
+            if(k === 'don') { vA=getMemberSums(a).donation; vB=getMemberSums(b).donation; }
             if(k === 'lastPaid') { vA=getLastPaidIndex(a); vB=getLastPaidIndex(b); }
             return window.sortState.order==='asc' ? vA-vB : vB-vA;
         });
@@ -1899,7 +1967,7 @@ if (window.excludeInactive) {
         let sumDues = 0, sumUnpaid = 0, sumDon = 0;
 
         list.forEach((m, idx) => {
-            const sums = getMemberSums(m.name);
+            const sums = getMemberSums(m);
             const unpaidInfo = getUnpaidInfo(m);
             const lpIdx = getLastPaidIndex(m);
             const fullPaid = isFullyPaid(m); // ✅ 완납 여부
@@ -1968,16 +2036,16 @@ if (window.excludeInactive) {
             let vA, vB; const k = window.sortState.key;
             if (window.memFilters.onlyRole && k === 'name') { vA = getRoleRank(a.role); vB = getRoleRank(b.role); if (vA !== vB) return vA - vB; }
             if(k === 'name') return window.sortState.order==='asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
-            if(k === 'dues') { vA=getMemberSums(a.name).dues; vB=getMemberSums(b.name).dues; }
+            if(k === 'dues') { vA=getMemberSums(a).dues; vB=getMemberSums(b).dues; }
             if(k === 'unpaid') { vA=getUnpaidInfo(a).amount; vB=getUnpaidInfo(b).amount; }
-            if(k === 'don') { vA=getMemberSums(a.name).donation; vB=getMemberSums(b.name).donation; }
+            if(k === 'don') { vA=getMemberSums(a).donation; vB=getMemberSums(b).donation; }
             if(k === 'lastPaid') { vA=getLastPaidIndex(a); vB=getLastPaidIndex(b); }
             return window.sortState.order==='asc' ? vA-vB : vB-vA;
         });
 
         let sumDues = 0, sumUnpaid = 0, sumDon = 0;
         list.forEach((m, i) => {
-            const sums = getMemberSums(m.name); const unpaidInfo = getUnpaidInfo(m); const lpIdx = getLastPaidIndex(m);
+            const sums = getMemberSums(m); const unpaidInfo = getUnpaidInfo(m); const lpIdx = getLastPaidIndex(m);
             sumDues += sums.dues; sumUnpaid += unpaidInfo.amount; sumDon += sums.donation;
             html += `<tr><td>${i+1}</td><td style="font-weight:bold;">${m.name}</td><td>${m.role || '-'}</td><td>${m.status}</td><td class="money" style="color:blue;">${formatStandard(sums.dues)}</td><td class="money" style="color:red;">${formatStandard(unpaidInfo.amount)}</td><td class="money" style="color:green;">${formatStandard(sums.donation)}</td><td>${lpIdx === -1 ? '-' : (lpIdx+1) + '월'}</td></tr>`;
         });
@@ -2008,40 +2076,71 @@ if (window.excludeInactive) {
         location.href = `sms:${phones.join(',')}`;
     }
 
-    window.getMemberSums = (name) => { 
-        let dues=0, donation=0; 
-        window.trans.forEach(t=>{ if(t.type==='income' && t.desc.includes(name)) { if(t.cat==='월회비' || t.cat==='가입비') dues+=t.amt; if(t.cat==='찬조금') donation+=t.amt; } }); 
-        return { dues, donation }; 
+    window.getMemberSums = (memberRef) => {
+        const member = typeof memberRef === 'object'
+            ? memberRef
+            : (window.members || []).find(m => String(m.id) === String(memberRef)) || (window.members || []).find(m => m.name === memberRef);
+
+        let dues = 0, donation = 0;
+        window.trans.forEach(t => {
+            if (t.type !== 'income') return;
+            if (!member) return;
+            if (!transMatchesMember(t, member)) return;
+            if (t.cat === '월회비' || t.cat === '가입비') dues += Number(t.amt || 0);
+            if (t.cat === '찬조금') donation += Number(t.amt || 0);
+        });
+        return { dues, donation };
     }
-    
- window.getUnpaidInfo = (m) => {
-        if(EXCLUDED_STATUSES.includes(m.status)) return { amount:0, months:[] };
-        if(m.role === '총무') return { amount:0, months:[] };
-        
-        let startCheckMonth = 0; 
-        
-        // ✅ 1. 가입/복귀일자가 설정되어 있으면 그 달부터 계산
+
+    window.getUnpaidInfo = (m) => {
+        if (!m) return { amount:0, months:[] };
+        if (EXCLUDED_STATUSES.includes(m.status)) return { amount:0, months:[] };
+        if (m.role === '총무') return { amount:0, months:[] };
+
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonthIdx = now.getMonth();
+
+        let startCheckMonth = 0;
+
         if (m.joinDate && m.joinDate.trim() !== '') {
-            startCheckMonth = parseInt(m.joinDate.split('-')[1], 10) - 1; // 해당 월(Month) 추출
+            const parts = m.joinDate.split('-');
+            const joinYear = Number(parts[0]);
+            const joinMonth = Number(parts[1]);
+
+            if (!Number.isNaN(joinYear) && joinYear > currentYear) return { amount:0, months:[] };
+            if (!Number.isNaN(joinYear) && joinYear === currentYear) {
+                startCheckMonth = Math.max(0, (joinMonth || 1) - 1);
+            }
         } else {
-            // ✅ 2. 가입일자가 없으면 기존처럼 장부의 '가입비' 납부 내역으로 유추
-            const joinTrans = window.trans.find(t => t.cat === '가입비' && t.desc.includes(m.name));
-            if(joinTrans) startCheckMonth = parseInt(joinTrans.date.split('-')[1], 10) - 1; 
+            const joinTrans = (window.trans || []).find(t => t.cat === '가입비' && t.type === 'income' && transMatchesMember(t, m));
+            if (joinTrans) {
+                const parts = String(joinTrans.date || '').split('-');
+                const joinYear = Number(parts[0]);
+                const joinMonth = Number(parts[1]);
+
+                if (!Number.isNaN(joinYear) && joinYear > currentYear) return { amount:0, months:[] };
+                if (!Number.isNaN(joinYear) && joinYear === currentYear) {
+                    startCheckMonth = Math.max(0, (joinMonth || 1) - 1);
+                }
+            }
         }
 
-        // 월 인덱스 안전 장치 (0=1월, 11=12월)
-        if (isNaN(startCheckMonth) || startCheckMonth < 0) startCheckMonth = 0;
+        if (Number.isNaN(startCheckMonth) || startCheckMonth < 0) startCheckMonth = 0;
         if (startCheckMonth > 11) startCheckMonth = 11;
-        
-        let count=0, months=[];
-        const currentMonthIdx = new Date().getMonth(); 
-        
-        // 가입한 달(startCheckMonth)부터 현재 달 이전(currentMonthIdx)까지 반복하며 미납 체크
-        for(let i=startCheckMonth; i < currentMonthIdx; i++) { 
-            if(!m.paid[i]) { count++; months.push((i+1)+'월'); } 
+
+        syncPaymentsFromLedger();
+
+        let count = 0;
+        let months = [];
+        for (let i = startCheckMonth; i < currentMonthIdx; i++) {
+            if (!m.paid || !m.paid[i]) {
+                count++;
+                months.push((i + 1) + '월');
+            }
         }
-        
-        let monthlyFee = currentFees[m.status] || 0;
+
+        const monthlyFee = currentFees[m.status] || 0;
         return { amount: count * monthlyFee, months };
     }
 
@@ -3055,7 +3154,21 @@ window.uploadReceipt = async () => {
     }
     window.saveTransEdit = () => { 
         const id = Number(document.getElementById('editTransId').value); const t = window.trans.find(x => x.id === id); 
-        if(t) { t.date = document.getElementById('editTransDate').value; t.type = document.getElementById('editTransType').value; t.cat = document.getElementById('editTransCat').value; t.amt = parseInt(document.getElementById('editTransAmt').value); t.desc = document.getElementById('editTransDesc').value; saveToFirebase(); renderAll(); closeTransModal(); }
+        if(t) {
+            t.date = document.getElementById('editTransDate').value;
+            t.type = document.getElementById('editTransType').value;
+            t.cat = document.getElementById('editTransCat').value;
+            t.amt = parseInt(document.getElementById('editTransAmt').value);
+            t.desc = document.getElementById('editTransDesc').value;
+            const matchedMember = (t.type === 'income' && ['가입비','월회비','찬조금'].includes(t.cat))
+                ? findMemberFromDesc(t.desc, t.memberId)
+                : null;
+            t.memberId = matchedMember ? String(matchedMember.id ?? '') : '';
+            t.memberNameSnapshot = matchedMember ? String(matchedMember.name || '') : '';
+            saveToFirebase();
+            renderAll();
+            closeTransModal();
+        }
     }
     window.delTransFromModal = () => { if(confirm('삭제하시겠습니까?')){ const id = Number(document.getElementById('editTransId').value); window.trans = window.trans.filter(x => x.id !== id); saveToFirebase(); renderAll(); closeTransModal(); } }
 // 리스트에서 쓰레기통 아이콘 클릭 시 즉시 삭제하는 함수 (추가 위치)
