@@ -1068,7 +1068,7 @@ const auth = getAuth(app);
 // [추가] 페이지 관리 변수
     window.curLedgerPage = 1;   // 장부 현재 페이지
     window.curReceiptPage = 1;  // 영수증 현재 페이지
-    const ITEMS_PER_PAGE = 10;  // 한 페이지당 보여줄 개수
+    const ITEMS_PER_PAGE = 30;  // 한 페이지당 보여줄 개수
 
     window.sortState = { key: 'name', order: 'asc' };
     window.memFilters = { statuses: new Set(['all']), onlyRole: false };
@@ -1082,7 +1082,7 @@ const ROLE_GROUPS_DEF = {
     window.unpaidSort = 'name'; 
     window.calViewMode = 'month';
     window.curCalDate = new Date();
-    window.selectedMonths = new Set(['all']); 
+    window.selectedMonths = new Set([String(new Date().getMonth() + 1).padStart(2,'0')]); 
     window.selectedCats = new Set(['all']);
     window.isAdmin = false; 
     window.isAuditMode = false; 
@@ -1577,10 +1577,24 @@ window.addTrans = () => {
 
     function createFilterChips() {
         const mCon = document.getElementById('monthChips');
+        mCon.innerHTML = '';
+        const currentMonth = String(new Date().getMonth() + 1).padStart(2,'0');
+
+        const allBtn = document.createElement('button');
+        allBtn.className = 'filter-chip';
+        allBtn.innerText = '전체';
+        allBtn.onclick = () => toggleMonth(allBtn, 'all');
+        mCon.appendChild(allBtn);
+
         for(let i=1; i<=12; i++) {
-            const btn = document.createElement('button'); btn.className = 'filter-chip'; btn.innerText = i+'월';
-            btn.onclick = () => toggleMonth(btn, String(i).padStart(2,'0')); mCon.appendChild(btn);
+            const val = String(i).padStart(2,'0');
+            const btn = document.createElement('button');
+            btn.className = 'filter-chip' + (val === currentMonth ? ' active' : '');
+            btn.innerText = i+'월';
+            btn.onclick = () => toggleMonth(btn, val);
+            mCon.appendChild(btn);
         }
+
         const cCon = document.getElementById('catChips');
         [...CATS.income, ...CATS.expense].forEach(c => {
             const btn = document.createElement('button'); btn.className = 'filter-chip'; btn.innerText = c;
@@ -1589,13 +1603,34 @@ window.addTrans = () => {
     }
 
     window.toggleMonth = (btn, val) => {
-        if(val==='all') { window.selectedMonths.clear(); window.selectedMonths.add('all'); document.querySelectorAll('#monthChips .filter-chip').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); }
+        if(val==='all') {
+            window.selectedMonths.clear();
+            window.selectedMonths.add('all');
+            document.querySelectorAll('#monthChips .filter-chip').forEach(b=>b.classList.remove('active'));
+            btn.classList.add('active');
+        }
         else {
-            if(window.selectedMonths.has('all')) { window.selectedMonths.delete('all'); document.querySelector('#monthChips .filter-chip').classList.remove('active'); }
-            if(window.selectedMonths.has(val)) { window.selectedMonths.delete(val); btn.classList.remove('active'); }
-            else { window.selectedMonths.add(val); btn.classList.add('active'); }
-            if(window.selectedMonths.size===0) { window.selectedMonths.add('all'); document.querySelector('#monthChips .filter-chip').classList.add('active'); }
-        } renderLedger();
+            if(window.selectedMonths.has('all')) {
+                window.selectedMonths.delete('all');
+                const allBtn = document.querySelector('#monthChips .filter-chip');
+                if (allBtn) allBtn.classList.remove('active');
+            }
+            if(window.selectedMonths.has(val)) { 
+                window.selectedMonths.delete(val); 
+                btn.classList.remove('active'); 
+            }
+            else { 
+                window.selectedMonths.add(val); 
+                btn.classList.add('active'); 
+            }
+            if(window.selectedMonths.size===0) {
+                window.selectedMonths.add('all');
+                const allBtn = document.querySelector('#monthChips .filter-chip');
+                if (allBtn) allBtn.classList.add('active');
+            }
+        }
+        window.curLedgerPage = 1;
+        renderLedger();
     }
     window.toggleCat = (btn, val) => {
         if(val==='all') { window.selectedCats.clear(); window.selectedCats.add('all'); document.querySelectorAll('#catChips .filter-chip').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); }
