@@ -1907,6 +1907,32 @@ function checkRoleMatch(memberRole, groupKey) {
 
     // setCategories는 위에서 이미 처리됨
 
+    // 현재 화면에서 조회 중인 명부 조건 그대로 가져오기
+    window.getFilteredMembersForDisplay = () => {
+        const key = document.getElementById('searchMem').value;
+        let list = [...window.members];
+
+        if(key) list = list.filter(m => m.name.includes(key));
+        if (!window.memFilters.statuses.has('all')) list = list.filter(m => window.memFilters.statuses.has(m.status));
+        if (window.memFilters.onlyRole) list = list.filter(m => m.role && m.role.trim() !== "");
+
+        if (window.selectedRoleGroups.size > 0) {
+            list = list.filter(m => {
+                let isMatch = false;
+                if (window.selectedRoleGroups.has('executive') && checkRoleMatch(m.role, 'executive')) isMatch = true;
+                if (window.selectedRoleGroups.has('advisor') && checkRoleMatch(m.role, 'advisor')) isMatch = true;
+                if (window.selectedRoleGroups.has('auditor') && checkRoleMatch(m.role, 'auditor')) isMatch = true;
+                return isMatch;
+            });
+        }
+
+        if (window.excludeInactive) {
+            list = list.filter(m => m.status !== '휴회' && m.status !== '탈회');
+        }
+
+        return list;
+    }
+
     // [1] 회원 명부 렌더링 (합계 포함)
     // [수정됨] 회원 명부 렌더링 함수
     window.renderMembers = () => {
@@ -1956,7 +1982,14 @@ if (window.excludeInactive) {
             }
 
             // 2. 기존 정렬 로직 (이름, 납부액, 미납액 등)
-            if(k === 'name') return window.sortState.order==='asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+            if(k === 'name') {
+                const aInactive = (a.status === '휴회' || a.status === '탈회');
+                const bInactive = (b.status === '휴회' || b.status === '탈회');
+                if (window.memFilters.statuses.has('all') && !window.excludeInactive && aInactive !== bInactive) {
+                    return aInactive ? 1 : -1;
+                }
+                return window.sortState.order==='asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+            }
             if(k === 'dues') { vA=getMemberSums(a).dues; vB=getMemberSums(b).dues; }
             if(k === 'unpaid') { vA=getUnpaidInfo(a).amount; vB=getUnpaidInfo(b).amount; }
             if(k === 'don') { vA=getMemberSums(a).donation; vB=getMemberSums(b).donation; }
@@ -2026,16 +2059,24 @@ if (window.excludeInactive) {
          if (metaViewport) metaViewport.setAttribute('content', 'width=1024, user-scalable=yes'); 
         const area = document.getElementById('memReportBodyNew');
         document.getElementById('memReportDate').innerText = `기준일: ${new Date().toLocaleDateString()}`;
-        
+
         let html = '';
-        let list = [...window.members];
-        if (!window.memFilters.statuses.has('all')) list = list.filter(m => window.memFilters.statuses.has(m.status));
-        if (window.memFilters.onlyRole) list = list.filter(m => m.role && m.role.trim() !== "");
-        
+        let list = getFilteredMembersForDisplay();
+
          list.sort((a,b) => {
             let vA, vB; const k = window.sortState.key;
-            if (window.memFilters.onlyRole && k === 'name') { vA = getRoleRank(a.role); vB = getRoleRank(b.role); if (vA !== vB) return vA - vB; }
-            if(k === 'name') return window.sortState.order==='asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+            if ((window.memFilters.onlyRole || window.selectedRoleGroups.size > 0) && k === 'name') { 
+                vA = getRoleRank(a.role); vB = getRoleRank(b.role); 
+                if (vA !== vB) return vA - vB; 
+            }
+            if(k === 'name') {
+                const aInactive = (a.status === '휴회' || a.status === '탈회');
+                const bInactive = (b.status === '휴회' || b.status === '탈회');
+                if (window.memFilters.statuses.has('all') && !window.excludeInactive && aInactive !== bInactive) {
+                    return aInactive ? 1 : -1;
+                }
+                return window.sortState.order==='asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+            }
             if(k === 'dues') { vA=getMemberSums(a).dues; vB=getMemberSums(b).dues; }
             if(k === 'unpaid') { vA=getUnpaidInfo(a).amount; vB=getUnpaidInfo(b).amount; }
             if(k === 'don') { vA=getMemberSums(a).donation; vB=getMemberSums(b).donation; }
@@ -2050,7 +2091,7 @@ if (window.excludeInactive) {
             html += `<tr><td>${i+1}</td><td style="font-weight:bold;">${m.name}</td><td>${m.role || '-'}</td><td>${m.status}</td><td class="money" style="color:blue;">${formatStandard(sums.dues)}</td><td class="money" style="color:red;">${formatStandard(unpaidInfo.amount)}</td><td class="money" style="color:green;">${formatStandard(sums.donation)}</td><td>${lpIdx === -1 ? '-' : (lpIdx+1) + '월'}</td></tr>`;
         });
         html += `<tr style="background:#e3f2fd; font-weight:800; border-top:2px solid #666;"><td colspan="4" style="text-align:center;">전체 합계 (${list.length}명)</td><td class="money" style="color:blue;">${formatStandard(sumDues)}</td><td class="money" style="color:red;">${formatStandard(sumUnpaid)}</td><td class="money" style="color:green;">${formatStandard(sumDon)}</td><td></td></tr>`;
-        
+
         area.innerHTML = html;
         const table = area.closest('table'); if(table) table.id = 'memReportTable';
         document.getElementById('memberReportPage').style.display = 'block';
