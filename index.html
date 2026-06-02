@@ -3339,7 +3339,7 @@ window.uploadReceipt = async () => {
         const el = document.getElementById(id);
         if (!el) return alert('저장할 화면을 찾을 수 없습니다.');
 
-        const btn = Array.from(document.querySelectorAll('.viewer-image-btn')).find(b => b.offsetParent !== null) || document.querySelector('.viewer-image-btn');
+        const btn = Array.from(document.querySelectorAll('.viewer-image-btn, .big-action-btn')).find(b => b.offsetParent !== null && String(b.innerText || '').includes('이미지')) || document.querySelector('.viewer-image-btn, .big-action-btn');
         const oldBtnText = btn ? btn.innerText : '';
         if (btn) { btn.disabled = true; btn.innerText = '저장 중...'; }
 
@@ -3400,9 +3400,17 @@ window.uploadReceipt = async () => {
             el.style.transform = 'none';
             el.style.width = '210mm';
 
+            // ✅ 전체 이미지 저장 공통 고화질 처리
+            // - 결산통계보고서 / 감사승인보고서 / 회원명부 등 captureElement를 쓰는 모든 저장 버튼에 적용
+            // - 화면 크기와 관계없이 최소 4배 배율로 저장
+            // - A4 300dpi 폭(약 3508px)에 가깝게 자동 보정
+            const targetA4WidthPx = 3508;
+            const measuredWidth = Math.max(el.scrollWidth || 0, el.offsetWidth || 0, 794);
+            const highQualityScale = Math.min(5, Math.max(4, targetA4WidthPx / measuredWidth));
+
             const canvas = await html2canvas(el, {
                 backgroundColor: '#ffffff',
-                scale: 2,
+                scale: highQualityScale,
                 useCORS: true,
                 allowTaint: true,
                 scrollX: 0,
@@ -3411,6 +3419,7 @@ window.uploadReceipt = async () => {
                 windowHeight: Math.max(el.scrollHeight, 1600),
                 removeContainer: true,
                 logging: false,
+                imageTimeout: 15000,
                 ignoreElements: (node) => node && node.classList && node.classList.contains('google-visualization-tooltip')
             });
 
