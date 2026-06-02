@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes, viewport-fit=cover">
     <title>모던테니스 회계 [Online] 🎾</title>
-    <link href="https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&display=swap" rel="stylesheet">
   
 
 <link rel="manifest" href="./manifest.json?v=20240520_01"> <link rel="icon" type="image/png" href="./modern-192.png?v=20240520_02">
@@ -72,7 +71,7 @@
         .header-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 15px; margin-bottom: 20px; position: relative; z-index: 2;}
         .club-title { font-size: 1.6rem; font-weight: 800; display: flex; align-items: center; gap: 8px; letter-spacing: -0.5px; position: relative; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
         .ver-tag { font-size: 0.65rem; background: rgba(255,255,255,0.2); backdrop-filter: blur(4px); padding: 4px 10px; border-radius: 20px; color: #74ffff; font-weight: 700; transform: translateY(1px); border: 1px solid rgba(255,255,255,0.1); }
-        .signature-ver { font-family: 'Nanum Pen Script', cursive !important; font-size: 1.8rem; color: #ffeaa7 !important; margin-left: 8px; transform: rotate(-8deg) translateY(-3px); display: inline-block; text-shadow: 2px 2px 4px rgba(0,0,0,0.6); font-weight: normal; letter-spacing: 1px; position: relative; z-index: 10; }
+        .signature-ver { font-family: 'Comic Sans MS', 'Segoe Print', cursive !important; font-size: 1.8rem; color: #ffeaa7 !important; margin-left: 8px; transform: rotate(-8deg) translateY(-3px); display: inline-block; text-shadow: 2px 2px 4px rgba(0,0,0,0.6); font-weight: normal; letter-spacing: 1px; position: relative; z-index: 10; }
 
         .backup-btns { display: flex; gap: 6px; align-items: center; }
         .btn-backup { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 8px 14px; border-radius: 12px; font-size: 0.75rem; cursor: pointer; height: 34px; display: flex; align-items: center; justify-content: center; white-space: nowrap; backdrop-filter: blur(5px); transition: all 0.2s; }
@@ -663,9 +662,10 @@ th:first-child, td:first-child {
     <div id="auditReportPage" class="full-page-viewer">
         <button class="viewer-close-btn" onclick="closeAuditReport()">닫기</button>
         <button class="viewer-print-btn" onclick="window.print()">🖨 인쇄</button>
+        <button class="viewer-image-btn" onclick="captureElement('auditReportPaper', '감사승인보고서')">📸 이미지 저장</button>
         <button class="audit-sign-btn" id="btnUnlockAudit" onclick="unlockAuditMode()">🔐 감사 승인 모드</button>
         
-        <div class="a4-paper">
+        <div class="a4-paper" id="auditReportPaper">
             <div class="a4-header">
                 <div class="a4-title" id="auditTitle">2024년도 감사 보고서</div>
                 <div class="a4-subtitle">모던 테니스 클럽</div>
@@ -2593,6 +2593,8 @@ function initReportYears() {
 
 // Google Charts 라이브러리 로드 (메모리 미리 적재)
     google.charts.load("current", {packages:["corechart"]});
+    window.__reportChartsPending = 0;
+    window.__reportChartsReady = true;
 
     window.updateReport = () => {
         // [설정] 핀치 줌 허용
@@ -2605,6 +2607,8 @@ function initReportYears() {
         
         const paper = document.getElementById('settlementReportPaper');
         paper.innerHTML = '';
+        window.__reportChartsReady = true;
+        window.__reportChartsPending = 0;
 
         // --- 1. 데이터 집계 ---
         let filtered = window.trans.filter(t => t.date.startsWith(year));
@@ -2741,7 +2745,7 @@ function initReportYears() {
                         const percent = mTotalInc > 0 ? ((amt / mTotalInc) * 100).toFixed(1) : 0;
                         
                         // 그래프 스타일
-                        const barStyle = `width:${percent}%; height:100%; background: linear-gradient(180deg, #74b9ff 0%, #0984e3 50%, #00cec9 100%); box-shadow: 2px 2px 5px rgba(0,0,0,0.2); border-radius: 4px;`;
+                        const barStyle = `width:${percent}%; height:100%; background:#0984e3; box-shadow: 2px 2px 5px rgba(0,0,0,0.2); border-radius: 4px;`;
                         
                         rows += `<tr>
                             <td style="padding-left:20px;">${cat}</td>
@@ -2772,7 +2776,7 @@ function initReportYears() {
                         const percent = mTotalExp > 0 ? ((amt / mTotalExp) * 100).toFixed(1) : 0;
                         
                         // 그래프 스타일
-                        const barStyle = `width:${percent}%; height:100%; background: linear-gradient(180deg, #ff7675 0%, #d63031 50%, #e17055 100%); box-shadow: 2px 2px 5px rgba(0,0,0,0.2); border-radius: 4px;`;
+                        const barStyle = `width:${percent}%; height:100%; background:#d63031; box-shadow: 2px 2px 5px rgba(0,0,0,0.2); border-radius: 4px;`;
                         
                         rows += `<tr>
                             <td style="padding-left:20px;">${cat}</td>
@@ -2863,6 +2867,9 @@ function initReportYears() {
 
         // --- 5. Google Charts 그리기 (3D 옵션 적용) ---
         if (targetCat === 'all' && (totalInc > 0 || totalExp > 0)) {
+            window.__reportChartsReady = false;
+            window.__reportChartsPending = (chartDataInc.length > 1 ? 1 : 0) + (chartDataExp.length > 1 ? 1 : 0);
+            if (window.__reportChartsPending === 0) window.__reportChartsReady = true;
             google.charts.setOnLoadCallback(draw3DCharts);
 
             function draw3DCharts() {
@@ -2881,6 +2888,13 @@ function initReportYears() {
                         colors: ['#0984e3', '#00b894', '#6c5ce7', '#74b9ff', '#81ecec']
                     };
                     var chartInc = new google.visualization.PieChart(document.getElementById('piechart_income'));
+                    google.visualization.events.addListener(chartInc, 'ready', function() {
+                        try {
+                            document.getElementById('piechart_income').setAttribute('data-chart-uri', chartInc.getImageURI());
+                        } catch(e) {}
+                        window.__reportChartsPending = Math.max(0, (window.__reportChartsPending || 0) - 1);
+                        window.__reportChartsReady = window.__reportChartsPending === 0;
+                    });
                     chartInc.draw(dataInc, optionsInc);
                 }
 
@@ -2899,6 +2913,13 @@ function initReportYears() {
                         colors: ['#d63031', '#e17055', '#fab1a0', '#fd79a8', '#636e72']
                     };
                     var chartExp = new google.visualization.PieChart(document.getElementById('piechart_expense'));
+                    google.visualization.events.addListener(chartExp, 'ready', function() {
+                        try {
+                            document.getElementById('piechart_expense').setAttribute('data-chart-uri', chartExp.getImageURI());
+                        } catch(e) {}
+                        window.__reportChartsPending = Math.max(0, (window.__reportChartsPending || 0) - 1);
+                        window.__reportChartsReady = window.__reportChartsPending === 0;
+                    });
                     chartExp.draw(dataExp, optionsExp);
                 }
             }
@@ -3314,42 +3335,115 @@ window.uploadReceipt = async () => {
 
 
 
-    window.captureElement = (id, name) => {
+    window.captureElement = async (id, name) => {
         const el = document.getElementById(id);
         if (!el) return alert('저장할 화면을 찾을 수 없습니다.');
+
+        const btn = Array.from(document.querySelectorAll('.viewer-image-btn')).find(b => b.offsetParent !== null) || document.querySelector('.viewer-image-btn');
+        const oldBtnText = btn ? btn.innerText : '';
+        if (btn) { btn.disabled = true; btn.innerText = '저장 중...'; }
+
+        // 차트가 아직 그려지는 중이면 잠깐 기다림
+        const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+        let waited = 0;
+        while (window.__reportChartsReady === false && waited < 5000) {
+            await wait(250);
+            waited += 250;
+        }
+        await wait(300);
 
         const originOverflow = el.style.overflow;
         const originHeight = el.style.height;
         const originMaxHeight = el.style.maxHeight;
         const originTransform = el.style.transform;
+        const originWidth = el.style.width;
 
-        el.style.overflow = 'visible';
-        el.style.height = 'auto';
-        el.style.maxHeight = 'none';
-        el.style.transform = 'none';
+        const replacements = [];
+        try {
+            // Google Chart SVG/Canvas를 안전한 이미지 또는 빈 박스로 치환
+            ['piechart_income', 'piechart_expense'].forEach(cid => {
+                const chartEl = document.getElementById(cid);
+                if (!chartEl) return;
+                const uri = chartEl.getAttribute('data-chart-uri') || '';
+                replacements.push({ el: chartEl, html: chartEl.innerHTML, bg: chartEl.style.backgroundImage });
+                if (uri) {
+                    chartEl.innerHTML = `<img src="${uri}" style="width:100%; height:260px; object-fit:contain; display:block;">`;
+                } else {
+                    chartEl.innerHTML = `<div style="width:100%; height:260px; display:flex; align-items:center; justify-content:center; color:#999; font-size:12px;">차트 영역</div>`;
+                }
+                chartEl.style.backgroundImage = 'none';
+            });
 
-        html2canvas(el, {
-            backgroundColor: '#ffffff',
-            scale: 2,
-            useCORS: true,
-            scrollX: 0,
-            scrollY: 0,
-            windowWidth: el.scrollWidth,
-            windowHeight: el.scrollHeight
-        }).then(canvas => {
-            const a = document.createElement('a');
-            a.download = `${name}_${formatKoreaFileDate()}.png`;
-            a.href = canvas.toDataURL('image/png');
-            a.click();
-        }).catch(err => {
-            console.error(err);
-            alert('이미지 저장 중 오류가 발생했습니다. 차트가 늦게 그려진 경우 잠시 후 다시 눌러주세요.');
-        }).finally(() => {
+            // html2canvas가 0 크기 요소의 gradient/background를 처리하다 실패하는 경우 방지
+            const cleanedBackgrounds = [];
+            el.querySelectorAll('*').forEach(node => {
+                try {
+                    const cs = window.getComputedStyle(node);
+                    const hasBgImage = cs && cs.backgroundImage && cs.backgroundImage !== 'none';
+                    const zeroSize = node.offsetWidth === 0 || node.offsetHeight === 0;
+                    const isGradient = hasBgImage && cs.backgroundImage.includes('gradient');
+                    if ((hasBgImage && zeroSize) || isGradient) {
+                        cleanedBackgrounds.push({ node, bg: node.style.backgroundImage, bgc: node.style.backgroundColor });
+                        node.style.backgroundImage = 'none';
+                        if (isGradient && !node.style.backgroundColor) node.style.backgroundColor = '#dddddd';
+                    }
+                    if ((node.tagName === 'CANVAS' || node.tagName === 'SVG') && (node.offsetWidth === 0 || node.offsetHeight === 0)) {
+                        cleanedBackgrounds.push({ node, display: node.style.display });
+                        node.style.display = 'none';
+                    }
+                } catch(e) {}
+            });
+
+            el.style.overflow = 'visible';
+            el.style.height = 'auto';
+            el.style.maxHeight = 'none';
+            el.style.transform = 'none';
+            el.style.width = '210mm';
+
+            const canvas = await html2canvas(el, {
+                backgroundColor: '#ffffff',
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                scrollX: 0,
+                scrollY: 0,
+                windowWidth: Math.max(el.scrollWidth, 1200),
+                windowHeight: Math.max(el.scrollHeight, 1600),
+                removeContainer: true,
+                logging: false,
+                ignoreElements: (node) => node && node.classList && node.classList.contains('google-visualization-tooltip')
+            });
+
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    alert('이미지 파일 생성에 실패했습니다. 다시 눌러주세요.');
+                    return;
+                }
+                const a = document.createElement('a');
+                a.download = `${name}_${formatKoreaFileDate()}.png`;
+                a.href = URL.createObjectURL(blob);
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+            }, 'image/png');
+        } catch (err) {
+            console.error('image save error:', err);
+            alert('이미지 저장 중 오류가 발생했습니다. 최신 수정본으로 다시 배포한 뒤 실행해 주세요.');
+        } finally {
+            replacements.forEach(r => { r.el.innerHTML = r.html; if (r.bg !== undefined) r.el.style.backgroundImage = r.bg; });
+            if (typeof cleanedBackgrounds !== 'undefined') {
+                cleanedBackgrounds.forEach(r => {
+                    if (r.bg !== undefined) r.node.style.backgroundImage = r.bg;
+                    if (r.bgc !== undefined) r.node.style.backgroundColor = r.bgc;
+                    if (r.display !== undefined) r.node.style.display = r.display;
+                });
+            }
             el.style.overflow = originOverflow;
             el.style.height = originHeight;
             el.style.maxHeight = originMaxHeight;
             el.style.transform = originTransform;
-        });
+            el.style.width = originWidth;
+            if (btn) { btn.disabled = false; btn.innerText = oldBtnText; }
+        }
     }
     window.exportTableToExcel = (tableId, filename) => { const table = document.getElementById(tableId); const wb = XLSX.utils.table_to_book(table, {sheet: "Sheet1"}); XLSX.writeFile(wb, `${filename}_${formatKoreaFileDate()}.xlsx`); }
 // [추가] 계좌번호 복사 기능
