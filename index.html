@@ -332,6 +332,22 @@ th:first-child, td:first-child {
              box-shadow: 0 8px 20px rgba(0,0,0,0.5); z-index:5001; 
              font-size: 1.5rem; /* 폰트 확대 */
         }
+
+        .viewer-image-btn {
+             position: fixed; top: 20px; right: 365px;
+             background: linear-gradient(135deg, #1dd1a1 0%, #00d2d3 100%);
+             color: white; border: none;
+             padding: 18px 36px;
+             border-radius: 50px; cursor: pointer; font-weight: bold;
+             box-shadow: 0 8px 20px rgba(0,0,0,0.5); z-index:5001;
+             font-size: 1.5rem;
+        }
+
+        @media screen and (max-width: 768px) {
+            .viewer-close-btn { top: 12px; right: 12px; padding: 12px 18px; font-size: 1.05rem; }
+            .viewer-print-btn { top: 12px; right: 105px; padding: 12px 18px; font-size: 1.05rem; }
+            .viewer-image-btn { top: 12px; right: 205px; padding: 12px 18px; font-size: 1.05rem; }
+        }
         
     /* ▼▼▼ 기존 .big-action-btn 부터 끝까지 지우고 이걸 붙여넣으세요 ▼▼▼ */
         .big-action-btn {
@@ -397,7 +413,7 @@ th:first-child, td:first-child {
             .full-page-viewer * { visibility: visible !important; }
 
             /* 인쇄 시 버튼 등 숨김 */
-            .viewer-close-btn, .viewer-print-btn, .audit-sign-btn, .big-action-btn, 
+            .viewer-close-btn, .viewer-print-btn, .viewer-image-btn, .audit-sign-btn, .big-action-btn, 
             .btn-main, .signature-pad, .audit-controls { display: none !important; }
             
             /* 표 스타일 초기화 (깨짐 방지) */
@@ -421,6 +437,84 @@ th:first-child, td:first-child {
 .page-btn.active {
     background: #2d3436; color: white; border-color: #2d3436; transform: scale(1.1);
 }
+
+        /* ✅ 결산 통계 보고서 저장/출력 시 항목명·금액·비중 잘림 방지 */
+        #settlementReportPaper {
+            padding: 10mm !important;
+            overflow: visible !important;
+        }
+        #settlementReportPaper table,
+        #settlementReportPaper .audit-table {
+            min-width: 0 !important;
+            width: 100% !important;
+            table-layout: fixed !important;
+        }
+        #settlementReportPaper th,
+        #settlementReportPaper td {
+            white-space: normal !important;
+            word-break: keep-all !important;
+            overflow-wrap: anywhere !important;
+            line-height: 1.35 !important;
+        }
+        #settlementReportPaper td.money,
+        #settlementReportPaper .money {
+            white-space: nowrap !important;
+            word-break: normal !important;
+            overflow-wrap: normal !important;
+        }
+        #settlementReportPaper .report-chart-grid {
+            display: grid !important;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+            gap: 8px !important;
+            align-items: start !important;
+            width: 100% !important;
+        }
+        #settlementReportPaper .report-chart-card {
+            min-width: 0 !important;
+            width: 100% !important;
+            overflow: visible !important;
+            padding: 8px !important;
+        }
+        #settlementReportPaper .report-pie-chart {
+            width: 100% !important;
+            height: 230px !important;
+            overflow: visible !important;
+        }
+        #settlementReportPaper .report-legend-table {
+            min-width: 0 !important;
+            width: 100% !important;
+            table-layout: fixed !important;
+            font-size: 8.5pt !important;
+        }
+        #settlementReportPaper .report-legend-table td {
+            padding: 4px 5px !important;
+        }
+        #settlementReportPaper .report-month-table th:nth-child(1),
+        #settlementReportPaper .report-month-table td:nth-child(1) {
+            width: 42% !important;
+        }
+        #settlementReportPaper .report-month-table th:nth-child(2),
+        #settlementReportPaper .report-month-table td:nth-child(2) {
+            width: 31% !important;
+        }
+        #settlementReportPaper .report-month-table th:nth-child(3),
+        #settlementReportPaper .report-month-table td:nth-child(3) {
+            width: 27% !important;
+        }
+        #settlementReportPaper .ratio-cell {
+            white-space: nowrap !important;
+            word-break: normal !important;
+            overflow-wrap: normal !important;
+        }
+        @media print {
+            #settlementReportPaper {
+                padding: 0 !important;
+            }
+            #settlementReportPaper .report-chart-grid {
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+            }
+        }
+
     </style>
 </head>
 <body>
@@ -561,6 +655,7 @@ th:first-child, td:first-child {
     <div id="settlementReportPage" class="full-page-viewer">
         <button class="viewer-close-btn" onclick="closeSettlementReport()">닫기</button>
         <button class="viewer-print-btn" onclick="window.print()">🖨 인쇄</button>
+        <button class="viewer-image-btn" onclick="captureElement('settlementReportPaper', '결산통계보고서')">📸 이미지 저장</button>
         <div class="a4-paper" id="settlementReportPaper">
             </div>
     </div>
@@ -1081,8 +1176,46 @@ const ROLE_GROUPS_DEF = {
     window.selectedRoleGroups = new Set(); 
     window.unpaidSort = 'name'; 
     window.calViewMode = 'month';
-    window.curCalDate = new Date();
-    window.selectedMonths = new Set([String(new Date().getMonth() + 1).padStart(2,'0')]); 
+
+    // ✅ 한국시간(KST) 기준 날짜 헬퍼: date input이 오전에 전날로 밀리는 문제 방지
+    function getKoreaParts(date = new Date()) {
+        const parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit'
+        }).formatToParts(date).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+        return { year: Number(parts.year), month: Number(parts.month), day: Number(parts.day) };
+    }
+
+    function formatKoreaISODate(date = new Date()) {
+        const p = getKoreaParts(date);
+        return `${p.year}-${String(p.month).padStart(2,'0')}-${String(p.day).padStart(2,'0')}`;
+    }
+
+    function formatKoreaDateText(date = new Date()) {
+        const p = getKoreaParts(date);
+        return `${p.year}년 ${p.month}월 ${p.day}일`;
+    }
+
+    function formatKoreaFileDate(date = new Date()) {
+        return formatKoreaISODate(date).replaceAll('-', '.');
+    }
+
+    function getKoreaDateObject(date = new Date()) {
+        const p = getKoreaParts(date);
+        return new Date(p.year, p.month - 1, p.day);
+    }
+
+    function parseISODateLocal(isoDate) {
+        const [y, m, d] = String(isoDate || '').split('-').map(Number);
+        return new Date(y || 1970, (m || 1) - 1, d || 1);
+    }
+
+    function getKoreaTimestampISO() {
+        const offsetMs = 9 * 60 * 60 * 1000;
+        return new Date(Date.now() + offsetMs).toISOString().replace('Z', '+09:00');
+    }
+
+    window.curCalDate = getKoreaDateObject();
+    window.selectedMonths = new Set([formatKoreaISODate().substring(5, 7)]); 
     window.selectedCats = new Set(['all']);
     window.isAdmin = false; 
     window.isAuditMode = false; 
@@ -1145,8 +1278,8 @@ window.toggleExcludeInactive = (el) => {
 
 window.onload = () => {
         // [기존 설정 유지]
-        document.getElementById('tDate').valueAsDate = new Date();
-        document.getElementById('rDateInput').valueAsDate = new Date();
+        document.getElementById('tDate').value = formatKoreaISODate();
+        document.getElementById('rDateInput').value = formatKoreaISODate();
         createFilterChips();
         createMemberStatusChips();
         initReportYears();
@@ -1578,7 +1711,7 @@ window.addTrans = () => {
     function createFilterChips() {
         const mCon = document.getElementById('monthChips');
         mCon.innerHTML = '';
-        const currentMonth = String(new Date().getMonth() + 1).padStart(2,'0');
+        const currentMonth = formatKoreaISODate().substring(5, 7);
 
         const allBtn = document.createElement('button');
         allBtn.className = 'filter-chip';
@@ -1920,7 +2053,7 @@ function checkRoleMatch(memberRole, groupKey) {
         const m = window.members.find(x => x.name === memberName);
         if (!m) { area.style.display = 'none'; return; }
 
-        const nowIdx = new Date().getMonth();
+        const nowIdx = getKoreaParts().month - 1;
         btnsDiv.innerHTML = '';
         for (let i = 0; i <= nowIdx; i++) {
             const paid = m.paid && m.paid[i];
@@ -2093,7 +2226,7 @@ if (window.excludeInactive) {
          const metaViewport = document.querySelector('meta[name="viewport"]');
          if (metaViewport) metaViewport.setAttribute('content', 'width=1024, user-scalable=yes'); 
         const area = document.getElementById('memReportBodyNew');
-        document.getElementById('memReportDate').innerText = `기준일: ${new Date().toLocaleDateString()}`;
+        document.getElementById('memReportDate').innerText = `기준일: ${formatKoreaDateText()}`;
 
         let html = '';
         let list = getFilteredMembersForDisplay();
@@ -2315,7 +2448,7 @@ window.saveFeeSettings = () => {
                 const day = new Date(year, month, d).getDay(); const isHol = isHoliday(full);
                 if(isHol || day === 0) div.classList.add('sun', 'holiday'); else if(day === 6) div.classList.add('sat');
                 
-                const today = new Date(); 
+                const today = getKoreaDateObject(); 
                 if(today.getFullYear()===year && today.getMonth()===month && today.getDate()===d) div.classList.add('today');
 
                 const dayEvents = window.events.filter(e => e.date === full); 
@@ -2406,7 +2539,7 @@ const mmdd = date.substring(5);
         });
     }
 
-    displayList.sort((a, b) => new Date(a.date) - new Date(b.date));
+    displayList.sort((a, b) => parseISODateLocal(a.date) - parseISODateLocal(b.date));
 
     if (displayList.length === 0) {
         c.innerHTML = `<div style="text-align:center; padding:30px; color:#aaa; font-size:0.85rem;">${selectedYear}년 일정이 없습니다.</div>`;
@@ -2420,7 +2553,7 @@ const mmdd = date.substring(5);
         d.style.background = e.isBirthday ? '#fff5f5' : 'white';
         d.style.cursor = e.isBirthday ? 'default' : 'pointer';
 
-        const dateObj = new Date(e.date);
+        const dateObj = parseISODateLocal(e.date);
         const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
         const dayName = dayNames[dateObj.getDay()];
         
@@ -2445,7 +2578,7 @@ function initReportYears() {
         const eSel = document.getElementById('eventListYear'); 
         ySel.innerHTML = ''; eSel.innerHTML = '';
         
-        const currentYear = new Date().getFullYear();
+        const currentYear = getKoreaParts().year;
         // 2023년부터 현재+2년까지 목록 생성
         for(let y = currentYear + 1; y >= 2025; y--) { 
             const opt = `<option value="${y}">${y}년</option>`;
@@ -2516,20 +2649,60 @@ function initReportYears() {
         for (const [key, val] of Object.entries(tempIncObj)) chartDataInc.push([key, val]);
         for (const [key, val] of Object.entries(tempExpObj)) chartDataExp.push([key, val]);
 
+        // ✅ 차트 항목명이 잘리는 문제 방지: Google Chart의 labeled legend 대신
+        //    전체 항목명을 아래 표 형태의 범례로 별도 출력합니다.
+        function escapeReportText(v) {
+            return String(v ?? '').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+        }
+
+        function buildPieLegendHtml(dataRows, total, themeColor) {
+            if (!dataRows || dataRows.length <= 1 || !total) {
+                return '<div style="font-size:0.85rem; color:#999; padding:8px 0;">내역 없음</div>';
+            }
+            return `
+                <table class="report-legend-table" style="width:100%; border-collapse:collapse; table-layout:fixed; margin-top:4px; font-size:9pt;">
+                    <colgroup>
+                        <col style="width:52%">
+                        <col style="width:30%">
+                        <col style="width:18%">
+                    </colgroup>
+                    <tbody>
+                        ${dataRows.slice(1).map(row => {
+                            const label = escapeReportText(row[0]);
+                            const amount = Number(row[1] || 0);
+                            const percent = total > 0 ? ((amount / total) * 100).toFixed(1) : '0.0';
+                            return `
+                                <tr>
+                                    <td style="border:1px solid #ddd; padding:5px 7px; text-align:left; white-space:normal; word-break:keep-all; overflow-wrap:anywhere; font-weight:700; color:${themeColor};">${label}</td>
+                                    <td style="border:1px solid #ddd; padding:5px 7px; text-align:right; white-space:nowrap; font-weight:700;">${formatStandard(amount)}</td>
+                                    <td style="border:1px solid #ddd; padding:5px 7px; text-align:right; white-space:nowrap; color:${themeColor}; font-weight:800;">${percent}%</td>
+                                </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>`;
+        }
+
+        const incomeLegendHtml = buildPieLegendHtml(chartDataInc, totalInc, '#0984e3');
+        const expenseLegendHtml = buildPieLegendHtml(chartDataExp, totalExp, '#d63031');
+
         // --- 2. [전체 통계] 3D 차트 영역 HTML ---
         let chartSectionHtml = '';
         if (targetCat === 'all' && (totalInc > 0 || totalExp > 0)) {
             chartSectionHtml = `
             <div class="audit-section" style="page-break-inside: avoid; margin-bottom: 30px;">
                 <div class="audit-h3">📊 ${year}년 전체 통계 (3D 분석)</div>
-                <div style="display:flex; justify-content:space-around; flex-wrap:wrap; gap:10px;">
-                    <div style="width:48%; min-width:300px; text-align:center;">
-                        <h4 style="color:#0984e3; margin-bottom:5px;">수입 구성</h4>
-                        <div id="piechart_income" style="width: 100%; height: 300px;"></div>
+                <div class="report-chart-grid">
+                    <div class="report-chart-card" style="text-align:center; border:1px solid #eee; border-radius:12px; background:#fff;">
+                        <h4 style="color:#0984e3; margin:0 0 5px 0;">수입 구성</h4>
+                        <div id="piechart_income" class="report-pie-chart"></div>
+                        <div style="font-size:0.78rem; color:#666; margin:2px 0 4px 0;">항목 · 금액 · 비중</div>
+                        ${incomeLegendHtml}
                     </div>
-                    <div style="width:48%; min-width:300px; text-align:center;">
-                        <h4 style="color:#d63031; margin-bottom:5px;">지출 구성</h4>
-                        <div id="piechart_expense" style="width: 100%; height: 300px;"></div>
+                    <div class="report-chart-card" style="text-align:center; border:1px solid #eee; border-radius:12px; background:#fff;">
+                        <h4 style="color:#d63031; margin:0 0 5px 0;">지출 구성</h4>
+                        <div id="piechart_expense" class="report-pie-chart"></div>
+                        <div style="font-size:0.78rem; color:#666; margin:2px 0 4px 0;">항목 · 금액 · 비중</div>
+                        ${expenseLegendHtml}
                     </div>
                 </div>
             </div>`;
@@ -2573,9 +2746,9 @@ function initReportYears() {
                         rows += `<tr>
                             <td style="padding-left:20px;">${cat}</td>
                             <td class="money" style="color:blue; text-align:right;">${formatStandard(amt)}</td>
-                            <td style="width:30%; padding:6px 10px; vertical-align:middle;">
+                            <td class="ratio-cell" style="width:27%; padding:6px 6px; vertical-align:middle;">
                                 <div style="display:flex; align-items:center; font-size:0.75rem; color:#0984e3; height:12px;">
-                                    <div style="flex:1; background:#dfe6e9; height:100%; border-radius:4px; margin-right:8px; overflow:visible; box-shadow:inset 1px 1px 3px rgba(0,0,0,0.1);">
+                                    <div style="flex:1; background:#dfe6e9; height:100%; border-radius:4px; margin-right:5px; overflow:visible; box-shadow:inset 1px 1px 3px rgba(0,0,0,0.1);">
                                         <div style="${barStyle}"></div>
                                     </div>
                                     <span style="font-weight:bold;">${percent}%</span>
@@ -2604,9 +2777,9 @@ function initReportYears() {
                         rows += `<tr>
                             <td style="padding-left:20px;">${cat}</td>
                             <td class="money" style="color:red; text-align:right;">${formatStandard(amt)}</td>
-                            <td style="width:30%; padding:6px 10px; vertical-align:middle;">
+                            <td class="ratio-cell" style="width:27%; padding:6px 6px; vertical-align:middle;">
                                 <div style="display:flex; align-items:center; font-size:0.75rem; color:#d63031; height:12px;">
-                                    <div style="flex:1; background:#dfe6e9; height:100%; border-radius:4px; margin-right:8px; overflow:visible; box-shadow:inset 1px 1px 3px rgba(0,0,0,0.1);">
+                                    <div style="flex:1; background:#dfe6e9; height:100%; border-radius:4px; margin-right:5px; overflow:visible; box-shadow:inset 1px 1px 3px rgba(0,0,0,0.1);">
                                         <div style="${barStyle}"></div>
                                     </div>
                                     <span style="font-weight:bold;">${percent}%</span>
@@ -2622,12 +2795,12 @@ function initReportYears() {
                     <div class="audit-h3" style="border-left: 5px solid #2d3436; background:#f1f2f6; padding:8px 10px;">
                         ${m}월 상세 현황
                     </div>
-                    <table class="audit-table">
+                    <table class="audit-table report-month-table">
                         <thead>
                             <tr style="background:#fff;">
                                 <th style="width:35%; border-bottom:2px solid #333;">항목</th>
-                                <th style="width:35%; border-bottom:2px solid #333;">금액</th>
-                                <th style="width:30%; border-bottom:2px solid #333;">비중(%)</th>
+                                <th style="width:31%; border-bottom:2px solid #333;">금액</th>
+                                <th style="width:27%; border-bottom:2px solid #333;">비중(%)</th>
                             </tr>
                         </thead>
                         <tbody>${rows}</tbody>
@@ -2648,7 +2821,7 @@ function initReportYears() {
         paper.innerHTML = `
             <div class="a4-header">
                 <div class="a4-title" style="font-size:1.8rem;">${year}년도 결산 통계 보고서</div>
-                <div class="a4-subtitle">출력일: ${new Date().toLocaleDateString()}</div>
+                <div class="a4-subtitle">출력일: ${formatKoreaDateText()}</div>
             </div>
             
             <div class="audit-section" style="border-bottom: 2px dashed #ccc; padding-bottom: 20px; margin-bottom: 20px;">
@@ -2697,11 +2870,14 @@ function initReportYears() {
                 if(chartDataInc.length > 1) {
                     var dataInc = google.visualization.arrayToDataTable(chartDataInc);
                     var optionsInc = {
-                        is3D: true, // [핵심] 3D 효과 켜기
-                        fontSize: 12,
-                        legend: { position: 'labeled' }, // 항목 이름을 차트 옆에 선으로 연결하여 표시
-                        chartArea: { width: '90%', height: '80%' },
-                        slices: { 0: {offset: 0.1}, 1: {offset: 0.05} }, // 1, 2등 항목 살짝 떼어내기 (강조)
+                        is3D: true,
+                        fontSize: 10,
+                        legend: { position: 'none' },
+                        pieSliceText: 'percentage',
+                        pieSliceTextStyle: { fontSize: 10, bold: true },
+                        tooltip: { text: 'percentage' },
+                        chartArea: { left: 0, top: 8, width: '100%', height: '86%' },
+                        slices: { 0: {offset: 0.08}, 1: {offset: 0.04} },
                         colors: ['#0984e3', '#00b894', '#6c5ce7', '#74b9ff', '#81ecec']
                     };
                     var chartInc = new google.visualization.PieChart(document.getElementById('piechart_income'));
@@ -2712,11 +2888,14 @@ function initReportYears() {
                 if(chartDataExp.length > 1) {
                     var dataExp = google.visualization.arrayToDataTable(chartDataExp);
                     var optionsExp = {
-                        is3D: true, // [핵심] 3D 효과 켜기
-                        fontSize: 12,
-                        legend: { position: 'labeled' }, // 항목 이름을 차트 옆에 선으로 연결하여 표시
-                        chartArea: { width: '90%', height: '80%' },
-                        slices: { 0: {offset: 0.1}, 1: {offset: 0.05} }, // 1, 2등 항목 살짝 떼어내기
+                        is3D: true,
+                        fontSize: 10,
+                        legend: { position: 'none' },
+                        pieSliceText: 'percentage',
+                        pieSliceTextStyle: { fontSize: 10, bold: true },
+                        tooltip: { text: 'percentage' },
+                        chartArea: { left: 0, top: 8, width: '100%', height: '86%' },
+                        slices: { 0: {offset: 0.08}, 1: {offset: 0.04} },
                         colors: ['#d63031', '#e17055', '#fab1a0', '#fd79a8', '#636e72']
                     };
                     var chartExp = new google.visualization.PieChart(document.getElementById('piechart_expense'));
@@ -2736,9 +2915,9 @@ function initReportYears() {
         const metaViewport = document.querySelector('meta[name="viewport"]');
         if (metaViewport) metaViewport.setAttribute('content', 'width=1024, user-scalable=yes'); 
         const year = document.getElementById('reportYear').value;
-        const now = new Date();
+        const now = getKoreaParts();
         document.getElementById('auditTitle').innerText = `${year}년도 감사 보고서`;
-        document.getElementById('auditDateLine').innerText = `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일`;
+        document.getElementById('auditDateLine').innerText = `${now.year}년 ${now.month}월 ${now.day}일`;
 
         const filtered = window.trans.filter(t => t.date.startsWith(year));
         let totalInc = 0, totalExp = 0;
@@ -2842,7 +3021,7 @@ function initReportYears() {
         const sig = canvas.toDataURL(); 
         if(!checked) return alert("영수증 확인 항목에 체크해주세요.");
         if(!name) return alert("감사 이름을 입력해주세요.");
-        window.auditState = { checked, name, sig, date: new Date().toISOString() };
+        window.auditState = { checked, name, sig, date: getKoreaTimestampISO() };
         saveToFirebase(); alert("승인 완료."); disableAuditInputs(); window.isAuditMode = false;
     }
     window.setUnpaidSort = (type) => {
@@ -3137,14 +3316,42 @@ window.uploadReceipt = async () => {
 
     window.captureElement = (id, name) => {
         const el = document.getElementById(id);
-        const originOverflow = el.style.overflow; const originHeight = el.style.height; const originMaxHeight = el.style.maxHeight;
-        el.style.overflow = 'visible'; el.style.height = 'auto'; el.style.maxHeight = 'none';
-        html2canvas(el, { scrollY: -window.scrollY }).then(canvas => {
-            const a = document.createElement('a'); a.download = `${name}_${new Date().toLocaleDateString()}.png`; a.href = canvas.toDataURL(); a.click();
-            el.style.overflow = originOverflow; el.style.height = originHeight; el.style.maxHeight = originMaxHeight;
+        if (!el) return alert('저장할 화면을 찾을 수 없습니다.');
+
+        const originOverflow = el.style.overflow;
+        const originHeight = el.style.height;
+        const originMaxHeight = el.style.maxHeight;
+        const originTransform = el.style.transform;
+
+        el.style.overflow = 'visible';
+        el.style.height = 'auto';
+        el.style.maxHeight = 'none';
+        el.style.transform = 'none';
+
+        html2canvas(el, {
+            backgroundColor: '#ffffff',
+            scale: 2,
+            useCORS: true,
+            scrollX: 0,
+            scrollY: 0,
+            windowWidth: el.scrollWidth,
+            windowHeight: el.scrollHeight
+        }).then(canvas => {
+            const a = document.createElement('a');
+            a.download = `${name}_${formatKoreaFileDate()}.png`;
+            a.href = canvas.toDataURL('image/png');
+            a.click();
+        }).catch(err => {
+            console.error(err);
+            alert('이미지 저장 중 오류가 발생했습니다. 차트가 늦게 그려진 경우 잠시 후 다시 눌러주세요.');
+        }).finally(() => {
+            el.style.overflow = originOverflow;
+            el.style.height = originHeight;
+            el.style.maxHeight = originMaxHeight;
+            el.style.transform = originTransform;
         });
     }
-    window.exportTableToExcel = (tableId, filename) => { const table = document.getElementById(tableId); const wb = XLSX.utils.table_to_book(table, {sheet: "Sheet1"}); XLSX.writeFile(wb, `${filename}_${new Date().toLocaleDateString()}.xlsx`); }
+    window.exportTableToExcel = (tableId, filename) => { const table = document.getElementById(tableId); const wb = XLSX.utils.table_to_book(table, {sheet: "Sheet1"}); XLSX.writeFile(wb, `${filename}_${formatKoreaFileDate()}.xlsx`); }
 // [추가] 계좌번호 복사 기능
     window.copyBankAccount = () => {
         const txt = document.getElementById('dispBank').innerText;
