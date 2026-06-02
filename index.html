@@ -677,14 +677,14 @@ th:first-child, td:first-child {
                     <tr><th style="width:30%">구분</th><th style="width:40%">금액</th><th>비고</th></tr>
                     <tr><td>총 수입</td><td class="money" id="auditTotalInc">0원</td><td></td></tr>
                     <tr><td>총 지출</td><td class="money" id="auditTotalExp">0원</td><td></td></tr>
-                    <tr style="background:#f0f8ff;"><td><b>잔액 (최종 자산)</b></td><td class="money" style="font-weight:bold; color:blue;" id="auditTotalBal">0원</td><td>이월금 포함</td></tr>
+                    <tr style="background:#f0f8ff;"><td><b>현재 잔액</b></td><td class="money" style="font-weight:bold; color:blue;" id="auditTotalBal">0원</td><td>수입-지출</td></tr>
                 </table>
             </div>
 
             <div class="audit-section">
                 <div class="audit-h3">2. 월별 수지 현황</div>
                 <table class="audit-table">
-                    <thead><tr><th style="width:15%">월</th><th style="width:28%">수입</th><th style="width:28%">지출</th><th>잔액</th></tr></thead>
+                    <thead><tr><th style="width:12%">월</th><th style="width:22%">수입</th><th style="width:22%">지출</th><th style="width:22%">월간 수지</th><th style="width:22%">누적 잔액</th></tr></thead>
                     <tbody id="auditMonthlyBody"></tbody>
                 </table>
             </div>
@@ -2714,6 +2714,7 @@ function initReportYears() {
 
         // --- 3. [월별] 테이블 HTML 생성 ---
         let monthlyTablesHtml = '';
+        let cumulativeBalance = 0;
         const sortedMonths = Object.keys(summary).sort();
 
         if (sortedMonths.length === 0) {
@@ -2727,8 +2728,9 @@ function initReportYears() {
 
                 let mTotalInc = 0; incomeKeys.forEach(k => mTotalInc += cats[k]);
                 let mTotalExp = 0; expenseKeys.forEach(k => mTotalExp += cats[k]);
-                // 월별 순수익(잔액) 계산
+                // 월별 수입-지출 금액과 조회 조건 기준 누적 잔액 계산
                 let mBalance = mTotalInc - mTotalExp;
+                cumulativeBalance += mBalance;
 
                 let rows = '';
 
@@ -2793,7 +2795,7 @@ function initReportYears() {
                     });
                 }
 
-                // 월별 테이블 조립 (Footer에는 최종 잔액만 표시)
+                // 월별 테이블 조립: 월간 수지와 누적 잔액을 분리 표시
                 monthlyTablesHtml += `
                 <div class="audit-section" style="break-inside: avoid; margin-bottom: 30px;">
                     <div class="audit-h3" style="border-left: 5px solid #2d3436; background:#f1f2f6; padding:8px 10px;">
@@ -2804,17 +2806,24 @@ function initReportYears() {
                             <tr style="background:#fff;">
                                 <th style="width:35%; border-bottom:2px solid #333;">항목</th>
                                 <th style="width:31%; border-bottom:2px solid #333;">금액</th>
-                                <th style="width:27%; border-bottom:2px solid #333;">비중(%)</th>
+                                <th style="width:27%; border-bottom:2px solid #333;">월내 비중(%)</th>
                             </tr>
                         </thead>
                         <tbody>${rows}</tbody>
                         <tfoot>
-                            <tr style="background:#e3f2fd; border-top:2px solid #aaa;">
-                                <td style="text-align:center; font-weight:800; color:#2d3436; padding:10px 0;">${m}월 최종 잔액</td>
-                                <td style="text-align:right; font-weight:800; color:${mBalance >= 0 ? 'blue' : 'red'}; padding:10px 0; font-size:1.1rem;">
-                                    ${formatStandard(mBalance)}
+                            <tr style="background:#f8fbff; border-top:2px solid #aaa;">
+                                <td style="text-align:center; font-weight:800; color:#2d3436; padding:8px 0;">${m}월 월간 수지</td>
+                                <td style="text-align:right; font-weight:800; color:${mBalance >= 0 ? 'blue' : 'red'}; padding:8px 0; font-size:1.05rem;">
+                                    ${mBalance >= 0 ? '+' : ''}${formatStandard(mBalance)}
                                 </td>
-                                <td></td>
+                                <td style="font-size:0.75rem; color:#777; text-align:center;">수입-지출</td>
+                            </tr>
+                            <tr style="background:#e3f2fd;">
+                                <td style="text-align:center; font-weight:900; color:#2d3436; padding:8px 0;">${m}월 누적 잔액</td>
+                                <td style="text-align:right; font-weight:900; color:${cumulativeBalance >= 0 ? 'blue' : 'red'}; padding:8px 0; font-size:1.1rem;">
+                                    ${formatStandard(cumulativeBalance)}
+                                </td>
+                                <td style="font-size:0.75rem; color:#777; text-align:center;">조회 조건 누적</td>
                             </tr>
                         </tfoot>
                     </table>
@@ -2839,7 +2848,7 @@ function initReportYears() {
                         <tr style="background:#f1f2f6;">
                             <th style="padding:12px; font-size:1rem; border:1px solid #ddd;">총 수입</th>
                             <th style="padding:12px; font-size:1rem; border:1px solid #ddd;">총 지출</th>
-                            <th style="padding:12px; font-size:1rem; border:1px solid #ddd;">총 잔액</th>
+                            <th style="padding:12px; font-size:1rem; border:1px solid #ddd;">현재 잔액</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2961,10 +2970,12 @@ function initReportYears() {
 
         let mHtml = ''; let acc = 0;
         Object.keys(monthly).sort().forEach(m => {
-            const d = monthly[m]; acc += (d.inc - d.exp);
-            if(d.inc > 0 || d.exp > 0) mHtml += `<tr><td>${m}월</td><td class="money" style="color:blue;">${formatStandard(d.inc)}</td><td class="money" style="color:red;">${formatStandard(d.exp)}</td><td class="money" style="font-weight:bold;">${formatStandard(acc)}</td></tr>`;
+            const d = monthly[m];
+            const monthlyBalance = d.inc - d.exp;
+            acc += monthlyBalance;
+            if(d.inc > 0 || d.exp > 0) mHtml += `<tr><td>${m}월</td><td class="money" style="color:blue;">${formatStandard(d.inc)}</td><td class="money" style="color:red;">${formatStandard(d.exp)}</td><td class="money" style="font-weight:bold; color:${monthlyBalance >= 0 ? 'blue' : 'red'};">${monthlyBalance >= 0 ? '+' : ''}${formatStandard(monthlyBalance)}</td><td class="money" style="font-weight:bold;">${formatStandard(acc)}</td></tr>`;
         });
-        document.getElementById('auditMonthlyBody').innerHTML = mHtml || '<tr><td colspan="4">내역 없음</td></tr>';
+        document.getElementById('auditMonthlyBody').innerHTML = mHtml || '<tr><td colspan="5">내역 없음</td></tr>';
 
         const incKeys = Object.keys(catsInc); const expKeys = Object.keys(catsExp);
         const maxRows = Math.max(incKeys.length, expKeys.length);
@@ -3680,7 +3691,7 @@ window.uploadReceipt = async () => {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       // [수정] 쿼리스트링(?v=...) 제거 -> 파일 내용 변경시 브라우저가 자동 감지함
-      navigator.serviceWorker.register('./sw.js?v20260122_055702', { updateViaCache: 'none' }).then(registration => {
+      navigator.serviceWorker.register('./sw.js?v20260602_settlement_balance_fix', { updateViaCache: 'none' }).then(registration => {
         console.log('ServiceWorker 등록 성공:', registration.scope);
       }).catch(error => {
         console.log('ServiceWorker 등록 실패:', error);
@@ -3705,7 +3716,7 @@ window.uploadReceipt = async () => {
 // - 최초 1회: 기존 SW/캐시 정리 후 새로고침
 // =========================================================
 (async function PURGE_OLD_CACHES_ONCE(){
-  const key = 'PURGE_SW_CACHE_DONE_ACCOUNTING_v20260122_055702';
+  const key = 'PURGE_SW_CACHE_DONE_ACCOUNTING_v20260602_settlement_balance_fix';
   if (localStorage.getItem(key) === '1') return;
   try {
     if ('serviceWorker' in navigator) {
