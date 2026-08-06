@@ -223,14 +223,24 @@ th:first-child, td:first-child {
         .autocomplete-item .ac-name { font-weight: 700; }
         .autocomplete-item .ac-fee { font-size: 0.78rem; color: #00b894; font-weight: 600; }
 
-        .ledger-receipt-btn { border:none; border-radius:10px; padding:7px 9px; font-size:0.72rem; font-weight:800; cursor:pointer; white-space:nowrap; margin-left:8px; }
+        .ledger-entry-main { display:flex; align-items:center; width:100%; gap:10px; }
+        .ledger-entry-info { flex:1; min-width:0; }
+        .ledger-entry-side { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+        .ledger-receipt-row { width:100%; display:flex; justify-content:flex-end; padding:8px 0 2px; }
+        .ledger-receipt-btn { border:none; border-radius:10px; padding:8px 12px; font-size:0.75rem; font-weight:800; cursor:pointer; white-space:nowrap; margin:0; }
         .ledger-receipt-btn.add { background:#fff3cd; color:#8a6500; border:1px solid #ffe08a; }
         .ledger-receipt-btn.view { background:#e8fff8; color:#007f63; border:1px solid #a7ead8; }
         .ledger-receipt-btn:active { transform:scale(.96); }
+        .receipt-source-buttons { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0; }
+        .receipt-source-btn { border:1px solid #dfe6e9; background:#fff; border-radius:12px; padding:13px 8px; font-weight:800; cursor:pointer; font-size:.9rem; }
+        .receipt-file-status { min-height:38px; background:#f8f9fa; border:1px dashed #ced6e0; border-radius:10px; padding:9px 10px; font-size:.78rem; color:#636e72; margin-bottom:10px; word-break:break-all; }
         @media (max-width:600px) {
             .trans-item { align-items:flex-start; gap:6px; }
             .item-actions { gap:5px; margin-left:5px; }
-            .ledger-receipt-btn { padding:7px 8px; }
+            .ledger-entry-main { gap:6px; }
+            .ledger-entry-side { gap:5px; }
+            .ledger-receipt-row { justify-content:stretch; }
+            .ledger-receipt-btn { width:100%; padding:9px 10px; }
         }
 
         /* Unpaid & Calendar & Receipts */
@@ -1130,7 +1140,13 @@ th:first-child, td:first-child {
             <input type="hidden" id="linkedReceiptTransId">
             <div id="linkedReceiptTransInfo" style="background:#f8f9fa; border:1px solid #eee; border-radius:12px; padding:12px; margin-bottom:12px; font-size:0.85rem; line-height:1.6;"></div>
             <label style="font-size:0.8rem; color:#666;">영수증 사진</label>
-            <input type="file" id="linkedReceiptFile" accept="image/*" capture="environment">
+            <input type="file" id="linkedReceiptCamera" accept="image/*" capture="environment" style="display:none" onchange="handleLinkedReceiptFile(this)">
+            <input type="file" id="linkedReceiptGallery" accept="image/*" style="display:none" onchange="handleLinkedReceiptFile(this)">
+            <div class="receipt-source-buttons">
+                <button type="button" class="receipt-source-btn" onclick="document.getElementById('linkedReceiptCamera').click()">📷 바로 촬영</button>
+                <button type="button" class="receipt-source-btn" onclick="document.getElementById('linkedReceiptGallery').click()">🖼️ 기존 사진 선택</button>
+            </div>
+            <div id="linkedReceiptFileStatus" class="receipt-file-status">선택된 사진이 없습니다.</div>
             <label style="font-size:0.8rem; color:#666;">설명</label>
             <input type="text" id="linkedReceiptDesc" placeholder="지출 내용 또는 영수증 설명">
             <div style="font-size:0.72rem; color:#888; margin:-2px 0 10px;">장부의 날짜·금액·항목과 자동으로 연결됩니다.</div>
@@ -2019,19 +2035,24 @@ window.renderLedger = () => {
                 ? `<button class="ledger-receipt-btn ${linkedReceipt ? 'view' : 'add'}" onclick="event.stopPropagation(); ${linkedReceipt ? `viewLinkedReceipt(${t.id})` : `openLinkedReceiptModal(${t.id})`}">${linkedReceipt ? '🧾 영수증 보기' : '➕ 영수증 등록'}</button>`
                 : '';
             div.className='trans-item'; 
+            div.style.flexWrap = 'wrap';
             div.innerHTML=`
-                <div style="flex:1;" onclick="openEditTrans(${t.id})">
-                    <div class="ti-date">${t.date}</div>
-                    <div class="ti-desc">${t.desc} <span class="ti-cat">${t.cat}</span></div>
+                <div class="ledger-entry-main">
+                    <div class="ledger-entry-info" onclick="openEditTrans(${t.id})">
+                        <div class="ti-date">${t.date}</div>
+                        <div class="ti-desc">${t.desc} <span class="ti-cat">${t.cat}</span></div>
+                    </div>
+                    <div class="ledger-entry-side">
+                        <div class="ti-amt" onclick="openEditTrans(${t.id})" style="color:${t.type==='income'?'var(--income)':'var(--expense)'}">
+                            ${t.type==='income'?'+':'-'}${formatStandard(t.amt)}
+                        </div>
+                        <div class="item-actions">
+                            <i class="fas fa-edit" style="color:#3498db; cursor:pointer; margin-left:5px;" onclick="openEditTrans(${t.id})"></i>
+                            <i class="fas fa-trash" style="color:#e74c3c; cursor:pointer; margin-left:5px;" onclick="deleteTransDirect(${t.id})"></i>
+                        </div>
+                    </div>
                 </div>
-                <div class="ti-amt" onclick="openEditTrans(${t.id})" style="color:${t.type==='income'?'var(--income)':'var(--expense)'}">
-                    ${t.type==='income'?'+':'-'}${formatStandard(t.amt)}
-                </div>
-                <div class="item-actions">
-                    ${receiptButton}
-                    <i class="fas fa-edit" style="color:#3498db; cursor:pointer; margin-left:5px;" onclick="openEditTrans(${t.id})"></i>
-                    <i class="fas fa-trash" style="color:#e74c3c; cursor:pointer; margin-left:5px;" onclick="deleteTransDirect(${t.id})"></i>
-                </div>`;
+                ${t.type === 'expense' ? `<div class="ledger-receipt-row">${receiptButton}</div>` : ''}`;
             list.appendChild(div);
         });
     }
@@ -3324,30 +3345,68 @@ function getReceiptForTransaction(transId) {
     ) || null;
 }
 
-async function compressReceiptFile(file, maxWidth = 900, quality = 0.62) {
+async function compressReceiptFile(file, maxWidth = 1400, targetBytes = 650 * 1024) {
+    if (!file || !String(file.type || '').startsWith('image/')) throw new Error('이미지 파일만 등록할 수 있습니다.');
     const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = e => resolve(e.target.result);
-        reader.onerror = reject;
+        reader.onerror = () => reject(new Error('사진을 읽지 못했습니다.'));
         reader.readAsDataURL(file);
     });
-    return await new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-            let width = img.width, height = img.height;
-            if (width > maxWidth) { height = Math.round(height * maxWidth / width); width = maxWidth; }
-            const canvas = document.createElement('canvas');
-            canvas.width = width; canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
-            ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', quality));
-        };
-        img.onerror = reject;
-        img.src = dataUrl;
+    const img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error('사진 형식을 처리하지 못했습니다.'));
+        el.src = dataUrl;
     });
+
+    let width = img.naturalWidth || img.width;
+    let height = img.naturalHeight || img.height;
+    if (width > maxWidth) {
+        height = Math.round(height * maxWidth / width);
+        width = maxWidth;
+    }
+
+    let quality = 0.82;
+    let result = '';
+    for (let attempt = 0; attempt < 10; attempt++) {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(width));
+        canvas.height = Math.max(1, Math.round(height));
+        const ctx = canvas.getContext('2d', { alpha:false });
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        result = canvas.toDataURL('image/jpeg', quality);
+        const approxBytes = Math.ceil((result.length - result.indexOf(',') - 1) * 0.75);
+        if (approxBytes <= targetBytes) return result;
+        if (quality > 0.48) quality -= 0.09;
+        else {
+            width *= 0.84;
+            height *= 0.84;
+            quality = 0.62;
+        }
+    }
+    const finalBytes = Math.ceil((result.length - result.indexOf(',') - 1) * 0.75);
+    if (finalBytes > 900 * 1024) throw new Error('사진 압축 후에도 용량이 큽니다. 영수증 부분만 가까이 촬영해주세요.');
+    return result;
 }
+
+window.pendingLinkedReceiptFile = null;
+window.handleLinkedReceiptFile = (input) => {
+    const file = input && input.files && input.files[0];
+    if (!file) return;
+    if (!String(file.type || '').startsWith('image/')) {
+        input.value = '';
+        return alert('사진 파일만 선택할 수 있습니다.');
+    }
+    window.pendingLinkedReceiptFile = file;
+    const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+    const status = document.getElementById('linkedReceiptFileStatus');
+    if (status) status.textContent = `선택 완료: ${file.name || '촬영 사진'} (${sizeMB}MB) · 저장할 때 자동 압축됩니다.`;
+};
 
 window.openLinkedReceiptModal = (transId) => {
     if(!window.isAdmin) return alert('관리자만 영수증을 등록할 수 있습니다.');
@@ -3356,7 +3415,10 @@ window.openLinkedReceiptModal = (transId) => {
     const existing = getReceiptForTransaction(transId);
     if(existing) return viewLinkedReceipt(transId);
     document.getElementById('linkedReceiptTransId').value = t.id;
-    document.getElementById('linkedReceiptFile').value = '';
+    window.pendingLinkedReceiptFile = null;
+    document.getElementById('linkedReceiptCamera').value = '';
+    document.getElementById('linkedReceiptGallery').value = '';
+    document.getElementById('linkedReceiptFileStatus').textContent = '선택된 사진이 없습니다.';
     document.getElementById('linkedReceiptDesc').value = t.desc || '';
     document.getElementById('linkedReceiptTransInfo').innerHTML = `
         <b>${t.date}</b><br>
@@ -3373,7 +3435,7 @@ window.saveLinkedReceipt = async () => {
     if(!window.isAdmin) return alert('관리자만 가능합니다.');
     const transId = Number(document.getElementById('linkedReceiptTransId').value);
     const t = window.trans.find(x => String(x.id) === String(transId));
-    const file = document.getElementById('linkedReceiptFile').files[0];
+    const file = window.pendingLinkedReceiptFile;
     const desc = document.getElementById('linkedReceiptDesc').value.trim();
     if(!t) return alert('연결할 장부 내역이 없습니다.');
     if(!file) return alert('영수증 사진을 선택해주세요.');
@@ -3382,7 +3444,7 @@ window.saveLinkedReceipt = async () => {
     document.getElementById('loadingMsg').innerText = '영수증 압축·연결 저장 및 서버 확인 중...';
     overlay.style.display = 'flex';
     try {
-        const image = await compressReceiptFile(file);
+        const image = await compressReceiptFile(file, 1400, 650 * 1024);
         const receipt = {
             id: Date.now(),
             date: t.date,
