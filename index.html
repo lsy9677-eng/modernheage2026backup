@@ -3345,35 +3345,94 @@ function getReceiptForTransaction(transId) {
     ) || null;
 }
 
-async function compressReceiptFile(file, maxWidth = 1400, targetBytes = 650 * 1024) {
-    if (!file || !String(file.type || '').startsWith('image/')) throw new Error('이미지 파일만 등록할 수 있습니다.');
-    const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = e => resolve(e.target.result);
-        reader.onerror = () => reject(new Error('사진을 읽지 못했습니다.'));
-        reader.readAsDataURL(file);
-    });
+async function readReceiptFileAsDataURL(file) {
+    if (!file) throw new Error('선택한 사진을 찾을 수 없습니다.');
+
+    // Android에서 카메라/갤러리 파일 핸들이 일시적으로 끊기는 경우를 대비해 2회 재시도
+    let lastError = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+            return await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                const timer = setTimeout(() => {
+                    try { reader.abort(); } catch (_) {}
+                    reject(new Error('사진 읽기 시간이 초과되었습니다.'));
+                }, 20000);
+                reader.onload = e => {
+                    clearTimeout(timer);
+                    if (!e.target || !e.target.result) reject(new Error('사진 데이터가 비어 있습니다.'));
+                    else resolve(e.target.result);
+                };
+                reader.onerror = () => {
+                    clearTimeout(timer);
+                    reject(reader.error || new Error('사진을 읽지 못했습니다.'));
+                };
+                reader.onabort = () => {
+                    clearTimeout(timer);
+                    reject(new Error('사진 읽기가 중단되었습니다.'));
+                };
+                reader.readAsDataURL(file);
+            });
+        } catch (err) {
+            lastError = err;
+            await new Promise(r => setTimeout(r, 250));
+        }
+    }
+
+    // FileReader 실패 시 Blob URL 방식으로 한 번 더 시도
+    try {
+        const url = URL.createObjectURL(file);
+        const result = await new Promise((resolve, reject) => {
+            const img = new Image();
+            const timer = setTimeout(() => reject(new Error('사진 열기 시간이 초과되었습니다.')), 20000);
+            img.onload = () => { clearTimeout(timer); resolve({ img, url }); };
+            img.onerror = () => { clearTimeout(timer); reject(new Error('사진 형식을 열 수 없습니다.')); };
+            img.src = url;
+        });
+        const canvas = document.createElement('canvas');
+        canvas.width = result.img.naturalWidth || result.img.width;
+        canvas.height = result.img.naturalHeight || result.img.height;
+        canvas.getContext('2d').drawImage(result.img, 0, 0);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        URL.revokeObjectURL(result.url);
+        return dataUrl;
+    } catch (_) {
+        throw new Error((lastError && lastError.message) || '사진을 읽지 못했습니다. 사진을 다시 선택해주세요.');
+    }
+}
+
+async function compressReceiptFile(file, maxWidth = 1280, targetBytes = 480 * 1024) {
+    if (!file) throw new Error('사진을 선택해주세요.');
+    // 일부 Android 카메라/HEIC 파일은 type이 비어 있으므로 확장자도 함께 허용
+    const name = String(file.name || '').toLowerCase();
+    const isImage = String(file.type || '').startsWith('image/') || /\.(jpg|jpeg|png|webp|heic|heif)$/i.test(name) || !file.type;
+    if (!isImage) throw new Error('이미지 파일만 등록할 수 있습니다.');
+
+    const dataUrl = await readReceiptFileAsDataURL(file);
     const img = await new Promise((resolve, reject) => {
         const el = new Image();
-        el.onload = () => resolve(el);
-        el.onerror = () => reject(new Error('사진 형식을 처리하지 못했습니다.'));
+        const timer = setTimeout(() => reject(new Error('사진 변환 시간이 초과되었습니다.')), 20000);
+        el.onload = () => { clearTimeout(timer); resolve(el); };
+        el.onerror = () => { clearTimeout(timer); reject(new Error('사진 형식을 처리하지 못했습니다. 다른 사진을 선택해주세요.')); };
         el.src = dataUrl;
     });
 
     let width = img.naturalWidth || img.width;
     let height = img.naturalHeight || img.height;
+    if (!width || !height) throw new Error('사진 크기를 확인할 수 없습니다.');
     if (width > maxWidth) {
         height = Math.round(height * maxWidth / width);
         width = maxWidth;
     }
 
-    let quality = 0.82;
+    let quality = 0.78;
     let result = '';
-    for (let attempt = 0; attempt < 10; attempt++) {
+    for (let attempt = 0; attempt < 12; attempt++) {
         const canvas = document.createElement('canvas');
         canvas.width = Math.max(1, Math.round(width));
         canvas.height = Math.max(1, Math.round(height));
         const ctx = canvas.getContext('2d', { alpha:false });
+        if (!ctx) throw new Error('사진 압축 기능을 사용할 수 없습니다.');
         ctx.fillStyle = '#fff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.imageSmoothingEnabled = true;
@@ -3382,30 +3441,39 @@ async function compressReceiptFile(file, maxWidth = 1400, targetBytes = 650 * 10
         result = canvas.toDataURL('image/jpeg', quality);
         const approxBytes = Math.ceil((result.length - result.indexOf(',') - 1) * 0.75);
         if (approxBytes <= targetBytes) return result;
-        if (quality > 0.48) quality -= 0.09;
+        if (quality > 0.42) quality -= 0.08;
         else {
-            width *= 0.84;
-            height *= 0.84;
-            quality = 0.62;
+            width *= 0.82;
+            height *= 0.82;
+            quality = 0.58;
         }
     }
     const finalBytes = Math.ceil((result.length - result.indexOf(',') - 1) * 0.75);
-    if (finalBytes > 900 * 1024) throw new Error('사진 압축 후에도 용량이 큽니다. 영수증 부분만 가까이 촬영해주세요.');
+    if (finalBytes > 700 * 1024) throw new Error('사진을 충분히 줄이지 못했습니다. 영수증 부분만 가까이 촬영해주세요.');
     return result;
 }
 
 window.pendingLinkedReceiptFile = null;
-window.handleLinkedReceiptFile = (input) => {
+window.pendingLinkedReceiptImage = null;
+window.handleLinkedReceiptFile = async (input) => {
     const file = input && input.files && input.files[0];
     if (!file) return;
-    if (!String(file.type || '').startsWith('image/')) {
-        input.value = '';
-        return alert('사진 파일만 선택할 수 있습니다.');
-    }
-    window.pendingLinkedReceiptFile = file;
-    const sizeMB = (file.size / 1024 / 1024).toFixed(1);
     const status = document.getElementById('linkedReceiptFileStatus');
-    if (status) status.textContent = `선택 완료: ${file.name || '촬영 사진'} (${sizeMB}MB) · 저장할 때 자동 압축됩니다.`;
+    window.pendingLinkedReceiptFile = null;
+    window.pendingLinkedReceiptImage = null;
+    if (status) status.textContent = '사진을 읽고 용량을 줄이는 중입니다...';
+    try {
+        // 선택 직후 즉시 읽어 둬서 Android가 파일 접근 권한을 회수해도 저장 가능하게 함
+        const compressed = await compressReceiptFile(file, 1280, 480 * 1024);
+        window.pendingLinkedReceiptImage = compressed;
+        const bytes = Math.ceil((compressed.length - compressed.indexOf(',') - 1) * 0.75);
+        if (status) status.textContent = `선택 완료: ${file.name || '촬영 사진'} · 저장용 ${(bytes/1024).toFixed(0)}KB로 자동 조절됨`;
+    } catch (err) {
+        console.error(err);
+        input.value = '';
+        if (status) status.textContent = '사진 처리 실패 — 다시 촬영하거나 다른 사진을 선택해주세요.';
+        alert('사진을 불러오지 못했습니다.\n' + err.message);
+    }
 };
 
 window.openLinkedReceiptModal = (transId) => {
@@ -3416,6 +3484,7 @@ window.openLinkedReceiptModal = (transId) => {
     if(existing) return viewLinkedReceipt(transId);
     document.getElementById('linkedReceiptTransId').value = t.id;
     window.pendingLinkedReceiptFile = null;
+    window.pendingLinkedReceiptImage = null;
     document.getElementById('linkedReceiptCamera').value = '';
     document.getElementById('linkedReceiptGallery').value = '';
     document.getElementById('linkedReceiptFileStatus').textContent = '선택된 사진이 없습니다.';
@@ -3435,16 +3504,15 @@ window.saveLinkedReceipt = async () => {
     if(!window.isAdmin) return alert('관리자만 가능합니다.');
     const transId = Number(document.getElementById('linkedReceiptTransId').value);
     const t = window.trans.find(x => String(x.id) === String(transId));
-    const file = window.pendingLinkedReceiptFile;
+    const image = window.pendingLinkedReceiptImage;
     const desc = document.getElementById('linkedReceiptDesc').value.trim();
     if(!t) return alert('연결할 장부 내역이 없습니다.');
-    if(!file) return alert('영수증 사진을 선택해주세요.');
+    if(!image) return alert('사진 처리가 완료된 뒤 저장해주세요. 사진을 다시 선택해야 할 수도 있습니다.');
 
     const overlay = document.getElementById('loadingOverlay');
     document.getElementById('loadingMsg').innerText = '영수증 압축·연결 저장 및 서버 확인 중...';
     overlay.style.display = 'flex';
     try {
-        const image = await compressReceiptFile(file, 1400, 650 * 1024);
         const receipt = {
             id: Date.now(),
             date: t.date,
