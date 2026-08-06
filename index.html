@@ -514,6 +514,42 @@ th:first-child, td:first-child {
             }
         }
 
+
+        /* 2026-08-06 모바일 헤더·장부 검색·회비 다중 월 선택 개선 */
+        .ledger-search-box { position: relative; margin-bottom: 14px; }
+        .ledger-search-box input { margin-bottom: 0; padding-left: 42px; padding-right: 42px; }
+        .ledger-search-icon { position:absolute; left:14px; top:50%; transform:translateY(-50%); color:#b2bec3; pointer-events:none; }
+        .ledger-search-clear { position:absolute; right:8px; top:50%; transform:translateY(-50%); border:0; background:#f1f3f5; color:#636e72; width:28px; height:28px; border-radius:50%; cursor:pointer; display:none; }
+        .quick-month-btn.selected { background:#2d3436 !important; color:#fff !important; border-color:#2d3436 !important; box-shadow:0 3px 8px rgba(45,52,54,.22); }
+        .quick-month-btn.paid { opacity:.58; cursor:not-allowed !important; }
+        .quick-month-guide { font-size:.72rem; color:#636e72; margin-top:6px; line-height:1.4; }
+
+        @media screen and (max-width: 600px) {
+            header { padding: 18px 14px 20px; border-bottom-left-radius:24px; border-bottom-right-radius:24px; }
+            .header-top { display:block; margin-bottom:16px; }
+            .club-title { font-size:1.35rem; gap:6px; white-space:nowrap; margin-bottom:12px; }
+            .ver-tag { font-size:.58rem; padding:3px 8px; }
+            .signature-ver { font-size:1.15rem !important; margin-left:3px; letter-spacing:0; transform:rotate(-7deg) translateY(-2px); }
+            .backup-btns { width:100%; display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:5px; align-items:stretch; }
+            .btn-backup, .btn-save-exit, .admin-login-btn { width:100%; min-width:0; height:36px; margin-left:0; padding:5px 3px; font-size:.66rem; border-radius:10px; line-height:1.15; text-align:center; justify-content:center; white-space:normal; }
+            .admin-login-btn { font-size:.95rem; }
+            .total-asset-box { margin-bottom:18px; }
+            .balance-amount { font-size:2.25rem; }
+            #bankInfoArea { margin-top:12px !important; padding:9px 6px !important; }
+            .stats-row { gap:7px; }
+            .stat-card { padding:10px 2px; border-radius:13px; min-width:0; }
+            .stat-val { font-size:.92rem; overflow-wrap:anywhere; }
+            .page { padding:16px 12px; }
+            #page-ledger .section-header { gap:8px; align-items:center; }
+            #page-ledger .section-title { font-size:1.08rem; white-space:nowrap; }
+            #page-ledger .section-header .btn-sub { padding:8px 9px; font-size:.72rem; white-space:normal; line-height:1.2; }
+            .filter-container { padding:14px; }
+            .trans-item { gap:6px; }
+            .ti-desc { font-size:.92rem; overflow-wrap:anywhere; }
+            .ti-amt { font-size:.92rem; white-space:nowrap; }
+            .item-actions { gap:5px; margin-left:3px; }
+        }
+
     </style>
 </head>
 <body>
@@ -589,6 +625,12 @@ th:first-child, td:first-child {
         </div>
 
         <div class="filter-container">
+            <label class="filter-label">내용 검색</label>
+            <div class="ledger-search-box">
+                <span class="ledger-search-icon">🔎</span>
+                <input type="search" id="ledgerSearch" placeholder="이름·내용·항목·금액 검색" autocomplete="off" oninput="onLedgerSearchInput()">
+                <button type="button" class="ledger-search-clear" id="ledgerSearchClear" onclick="clearLedgerSearch()" aria-label="검색어 지우기">×</button>
+            </div>
             <label class="filter-label">월 선택</label>
             <div class="chip-group" id="monthChips">
                 <button class="filter-chip active" onclick="toggleMonth(this, 'all')">전체</button>
@@ -1460,7 +1502,7 @@ window.saveAndExit = () => {
         el.innerHTML = '';
         CATS[type].forEach(c => { const op = document.createElement('option'); op.value=c; op.innerText=c; el.appendChild(op); });
         // ✅ 카테고리 변경 시 빠른 월 영역 초기화
-        document.getElementById('quickMonthArea').style.display = 'none';
+        resetSelectedDuesMonths();
         document.getElementById('acList').classList.remove('show');
         // ✅ tCat 변경 시 빠른 월 영역 재갱신
         el.onchange = () => {
@@ -1676,6 +1718,52 @@ window.saveAndExit = () => {
     }
 
 
+let selectedDuesMonths = new Set();
+let selectedDuesMemberName = '';
+let selectedDuesMonthlyFee = 0;
+
+function getSelectedDuesMonthText() {
+    const months = [...selectedDuesMonths].sort((a,b)=>a-b);
+    if (!months.length) return '';
+    const continuous = months.every((m, i) => i === 0 || m === months[i-1] + 1);
+    if (continuous && months.length > 1) return `${months[0]}~${months[months.length-1]}월`;
+    return months.map(m => `${m}월`).join(', ');
+}
+
+function applySelectedDuesMonths() {
+    if (!selectedDuesMemberName || selectedDuesMonths.size === 0) return;
+    const monthText = getSelectedDuesMonthText();
+    document.getElementById('tDesc').value = `${selectedDuesMemberName} ${monthText} 회비`;
+    if (selectedDuesMonthlyFee > 0) {
+        document.getElementById('tAmt').value = selectedDuesMonthlyFee * selectedDuesMonths.size;
+    }
+}
+
+function resetSelectedDuesMonths() {
+    selectedDuesMonths.clear();
+    selectedDuesMemberName = '';
+    selectedDuesMonthlyFee = 0;
+    const area = document.getElementById('quickMonthArea');
+    if (area) area.style.display = 'none';
+}
+
+window.onLedgerSearchInput = () => {
+    const input = document.getElementById('ledgerSearch');
+    const clearBtn = document.getElementById('ledgerSearchClear');
+    if (clearBtn) clearBtn.style.display = input && input.value.trim() ? 'block' : 'none';
+    window.curLedgerPage = 1;
+    renderLedger();
+};
+
+window.clearLedgerSearch = () => {
+    const input = document.getElementById('ledgerSearch');
+    if (input) { input.value = ''; input.focus(); }
+    const clearBtn = document.getElementById('ledgerSearchClear');
+    if (clearBtn) clearBtn.style.display = 'none';
+    window.curLedgerPage = 1;
+    renderLedger();
+};
+
 window.addTrans = () => {
         if(!window.isAdmin) return alert('관리자만 입력 가능합니다.');
         const date = document.getElementById('tDate').value;
@@ -1706,6 +1794,7 @@ window.addTrans = () => {
         const btn = document.getElementById('btnAdd'); btn.innerText = "저장 완료!"; btn.classList.add('saved');
         setTimeout(() => { btn.innerText = "입력 완료"; btn.classList.remove('saved'); }, 1000);
         document.getElementById('tAmt').value=''; document.getElementById('tDesc').value='';
+        resetSelectedDuesMonths();
     }
 
     function createFilterChips() {
@@ -1796,10 +1885,18 @@ window.renderLedger = () => {
     list.innerHTML = '';
 
     // 1. 필터링
+    const searchEl = document.getElementById('ledgerSearch');
+    const searchRaw = searchEl ? searchEl.value.trim().toLowerCase() : '';
+    const searchCompact = searchRaw.replace(/\s+/g, '');
     let filtered = window.trans.filter(t => {
-        const m = t.date.split('-')[1];
-        return (window.selectedMonths.has('all') || window.selectedMonths.has(m)) && 
-               (window.selectedCats.has('all') || window.selectedCats.has(t.cat));
+        const m = String(t.date || '').split('-')[1];
+        const monthOk = window.selectedMonths.has('all') || window.selectedMonths.has(m);
+        const catOk = window.selectedCats.has('all') || window.selectedCats.has(t.cat);
+        if (!monthOk || !catOk) return false;
+        if (!searchRaw) return true;
+        const amountText = Number(t.amt || 0).toLocaleString();
+        const haystack = `${t.date || ''} ${t.desc || ''} ${t.cat || ''} ${t.type === 'income' ? '수입' : '지출'} ${t.amt || ''} ${amountText}`.toLowerCase();
+        return haystack.includes(searchRaw) || haystack.replace(/\s+/g, '').includes(searchCompact);
     });
 
     // 2. [추가] 날짜순 정렬 (최신 날짜가 위로 오게 정렬)
@@ -2023,6 +2120,9 @@ function checkRoleMatch(memberRole, groupKey) {
         document.getElementById('tDesc').value = name + ' ';
         document.getElementById('acList').classList.remove('show');
         // ✅ 월회비 금액 자동 입력
+        selectedDuesMonths.clear();
+        selectedDuesMemberName = name;
+        selectedDuesMonthlyFee = fee > 0 ? fee : 0;
         if (fee > 0) document.getElementById('tAmt').value = fee;
         updateQuickMonthArea(name);
         // 내용 칸에 커서 유지 (월 선택 이어서)
@@ -2048,28 +2148,43 @@ function checkRoleMatch(memberRole, groupKey) {
         const cat = document.getElementById('tCat').value;
         const area = document.getElementById('quickMonthArea');
         const btnsDiv = document.getElementById('quickMonthBtns');
-        if (cat !== '월회비' || !memberName) { area.style.display = 'none'; return; }
+        if (cat !== '월회비' || !memberName) { resetSelectedDuesMonths(); return; }
 
         const m = window.members.find(x => x.name === memberName);
-        if (!m) { area.style.display = 'none'; return; }
+        if (!m) { resetSelectedDuesMonths(); return; }
+
+        if (selectedDuesMemberName !== memberName) selectedDuesMonths.clear();
+        selectedDuesMemberName = memberName;
+        selectedDuesMonthlyFee = Number(currentFees[m.status] || 0);
 
         const nowIdx = getKoreaParts().month - 1;
         btnsDiv.innerHTML = '';
         for (let i = 0; i <= nowIdx; i++) {
+            const month = i + 1;
             const paid = m.paid && m.paid[i];
+            const selected = selectedDuesMonths.has(month);
             const btn = document.createElement('button');
             btn.type = 'button';
-            btn.style.cssText = `padding:5px 10px; border-radius:8px; border:1px solid ${paid?'#00b894':'#dfe6e9'}; background:${paid?'#e8faf7':'#fff'}; color:${paid?'#00b894':'#2d3436'}; font-size:0.78rem; font-weight:${paid?'700':'400'}; cursor:pointer;`;
-            btn.innerHTML = `${i+1}월${paid?' ✓':''}`;
+            btn.className = `quick-month-btn${selected ? ' selected' : ''}${paid ? ' paid' : ''}`;
+            btn.style.cssText = `padding:6px 11px; border-radius:8px; border:1px solid ${paid?'#00b894':'#dfe6e9'}; background:${paid?'#e8faf7':'#fff'}; color:${paid?'#00b894':'#2d3436'}; font-size:0.78rem; font-weight:${paid?'700':'500'}; cursor:pointer;`;
+            btn.innerHTML = `${month}월${paid?' ✓':''}`;
             if (!paid) {
                 btn.onclick = () => {
-                    document.getElementById('tDesc').value = `${memberName} ${i+1}월 회비`;
-                    // 이미 선택된 월 있으면 범위로 합치기
+                    if (selectedDuesMonths.has(month)) selectedDuesMonths.delete(month);
+                    else selectedDuesMonths.add(month);
+                    applySelectedDuesMonths();
                     updateQuickMonthArea(memberName);
                 };
             }
             btnsDiv.appendChild(btn);
         }
+        const guide = document.createElement('div');
+        guide.className = 'quick-month-guide';
+        guide.style.flexBasis = '100%';
+        guide.innerHTML = selectedDuesMonths.size
+            ? `선택: <b>${getSelectedDuesMonthText()}</b> · 금액 <b>${(selectedDuesMonthlyFee * selectedDuesMonths.size).toLocaleString()}원</b>`
+            : '여러 달을 연속으로 누르면 “4~6월 회비”처럼 한 건으로 자동 등록됩니다.';
+        btnsDiv.appendChild(guide);
         area.style.display = 'block';
     }
 
