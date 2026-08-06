@@ -1137,7 +1137,7 @@ th:first-child, td:first-child {
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, set, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, set, get, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
    const firebaseConfig = {
   apiKey: "AIzaSyA3m3yVAGDsG_O-joG2TXAVn8akJJA_Q1s",
@@ -1196,8 +1196,7 @@ const auth = getAuth(app);
         if(!window.isAdmin) return alert('관리자 로그인이 필요합니다.');
         if(confirm('이 내역을 정말 삭제하시겠습니까?')) {
             window.trans = window.trans.filter(x => x.id !== id);
-            saveToFirebase(); // 서버 저장
-            renderAll();      // 화면 갱신
+            deleteTransItem(id).then(renderAll).catch(e => alert('삭제 저장 실패: ' + e.message));
         }
     }
     window.trans = []; window.members = []; window.receipts = []; window.events = []; window.settings = null;
@@ -1342,10 +1341,22 @@ window.onload = () => {
             document.getElementById('loadingOverlay').style.display = 'none'; // 로딩 해제
             const data = snapshot.val();
             if (data) {
-                window.trans = data.trans || [];
+                const deletedTrans = data.deletedTrans || {};
+                const deletedReceipts = data.deletedReceipts || {};
+                const legacyTrans = Array.isArray(data.trans) ? data.trans : Object.values(data.trans || {});
+                const itemTrans = Object.values(data.transItems || {});
+                const transMap = new Map();
+                legacyTrans.forEach(x => { if (x && !deletedTrans[String(x.id)]) transMap.set(String(x.id), x); });
+                itemTrans.forEach(x => { if (x && !deletedTrans[String(x.id)]) transMap.set(String(x.id), x); });
+                window.trans = Array.from(transMap.values()).sort((a,b) => Number(b.id||0)-Number(a.id||0));
                // 'members_acc'라는 별도 명단이 있으면 그걸 쓰고, 없으면 기존 'members'를 가져옵니다(최초 1회 복사)
 window.members = data.members_acc || data.members || [];
-                window.receipts = data.receipts || [];
+                const legacyReceipts = Array.isArray(data.receipts) ? data.receipts : Object.values(data.receipts || {});
+                const itemReceipts = Object.values(data.receiptItems || {});
+                const receiptMap = new Map();
+                legacyReceipts.forEach(x => { if (x && !deletedReceipts[String(x.id)]) receiptMap.set(String(x.id), x); });
+                itemReceipts.forEach(x => { if (x && !deletedReceipts[String(x.id)]) receiptMap.set(String(x.id), x); });
+                window.receipts = Array.from(receiptMap.values()).sort((a,b) => Number(b.id||0)-Number(a.id||0));
                 window.events = data.events || [];
                 window.settings = data.settings || {};
                 
@@ -1366,19 +1377,57 @@ window.members = data.members_acc || data.members || [];
         });
     };
 
+function cacheCurrentData() {
+    try {
+        localStorage.setItem('modernAccountSafetyCacheV2', JSON.stringify({
+            savedAt: getKoreaTimestampISO(), trans: window.trans, receipts: window.receipts,
+            members: window.members, events: window.events, settings: window.settings
+        }));
+    } catch(e) { console.warn('안전 캐시 저장 실패:', e); }
+}
+
+async function persistTransItem(item) {
+    cacheCurrentData();
+    const path = `${CLUB_ROOT}/transItems/${item.id}`;
+    await set(ref(db, path), item);
+    const check = await get(ref(db, path));
+    if (!check.exists()) throw new Error('장부 서버 확인 실패');
+    await remove(ref(db, `${CLUB_ROOT}/deletedTrans/${item.id}`));
+}
+
+async function deleteTransItem(id) {
+    cacheCurrentData();
+    await Promise.all([
+        remove(ref(db, `${CLUB_ROOT}/transItems/${id}`)),
+        set(ref(db, `${CLUB_ROOT}/deletedTrans/${id}`), true)
+    ]);
+}
+
+async function persistReceiptItem(item) {
+    cacheCurrentData();
+    const path = `${CLUB_ROOT}/receiptItems/${item.id}`;
+    await set(ref(db, path), item);
+    const check = await get(ref(db, path));
+    if (!check.exists() || !check.val().img) throw new Error('영수증 서버 확인 실패');
+    await remove(ref(db, `${CLUB_ROOT}/deletedReceipts/${item.id}`));
+}
+
+async function deleteReceiptItem(id) {
+    cacheCurrentData();
+    await Promise.all([
+        remove(ref(db, `${CLUB_ROOT}/receiptItems/${id}`)),
+        set(ref(db, `${CLUB_ROOT}/deletedReceipts/${id}`), true)
+    ]);
+}
+
 function saveToFirebase() {
     if(!window.isAdmin && !window.isAuditMode && window.trans.length > 0) return Promise.resolve();
-    
-    // [수정] 전체를 덮어쓰지 않고(set), 각 항목별로 경로를 지정해 업데이트(update)합니다.
+    cacheCurrentData();
     let updates = {};
-    updates[CLUB_ROOT + '/trans'] = window.trans;
-  updates[CLUB_ROOT + '/members_acc'] = window.members;
-    updates[CLUB_ROOT + '/receipts'] = window.receipts;
+    updates[CLUB_ROOT + '/members_acc'] = window.members;
     updates[CLUB_ROOT + '/events'] = window.events;
     updates[CLUB_ROOT + '/settings'] = window.settings;
     if(window.auditState) updates[CLUB_ROOT + '/auditState'] = window.auditState;
-
-    // ref(db)는 최상위 루트를 의미하며, 여기서 경로별로 찾아가서 수정합니다.
     return update(ref(db), updates);
 }
 
@@ -1721,6 +1770,7 @@ window.saveAndExit = () => {
 let selectedDuesMonths = new Set();
 let selectedDuesMemberName = '';
 let selectedDuesMonthlyFee = 0;
+let showFutureDuesMonths = false;
 
 function getSelectedDuesMonthText() {
     const months = [...selectedDuesMonths].sort((a,b)=>a-b);
@@ -1743,6 +1793,7 @@ function resetSelectedDuesMonths() {
     selectedDuesMonths.clear();
     selectedDuesMemberName = '';
     selectedDuesMonthlyFee = 0;
+    showFutureDuesMonths = false;
     const area = document.getElementById('quickMonthArea');
     if (area) area.style.display = 'none';
 }
@@ -1764,7 +1815,7 @@ window.clearLedgerSearch = () => {
     renderLedger();
 };
 
-window.addTrans = () => {
+window.addTrans = async () => {
         if(!window.isAdmin) return alert('관리자만 입력 가능합니다.');
         const date = document.getElementById('tDate').value;
         const type = document.getElementById('tType').value;
@@ -1778,7 +1829,7 @@ window.addTrans = () => {
             : null;
 
         const newId = Date.now();
-        window.trans.unshift({
+        const newTrans = {
             id:newId,
             date,
             type,
@@ -1787,8 +1838,15 @@ window.addTrans = () => {
             desc,
             memberId: matchedMember ? String(matchedMember.id ?? '') : '',
             memberNameSnapshot: matchedMember ? String(matchedMember.name || '') : ''
-        });
-        saveToFirebase();
+        };
+        window.trans.unshift(newTrans);
+        try {
+            await persistTransItem(newTrans);
+        } catch (e) {
+            console.error(e);
+            alert('장부가 화면에는 추가되었지만 서버 확인에 실패했습니다. 인터넷 연결 후 다시 저장해 주세요.');
+            return;
+        }
         // ✅ 문자 작성창 자동 열기 (설정 ON + 월회비/찬조금 수입일 때)
         maybeComposeSmsForTrans({ type, cat, amt, desc }).catch(console.warn);
         const btn = document.getElementById('btnAdd'); btn.innerText = "저장 완료!"; btn.classList.add('saved');
@@ -2158,8 +2216,9 @@ function checkRoleMatch(memberRole, groupKey) {
         selectedDuesMonthlyFee = Number(currentFees[m.status] || 0);
 
         const nowIdx = getKoreaParts().month - 1;
+        const lastIdx = showFutureDuesMonths ? 11 : nowIdx;
         btnsDiv.innerHTML = '';
-        for (let i = 0; i <= nowIdx; i++) {
+        for (let i = 0; i <= lastIdx; i++) {
             const month = i + 1;
             const paid = m.paid && m.paid[i];
             const selected = selectedDuesMonths.has(month);
@@ -2177,6 +2236,14 @@ function checkRoleMatch(memberRole, groupKey) {
                 };
             }
             btnsDiv.appendChild(btn);
+        }
+        if (nowIdx < 11) {
+            const moreBtn = document.createElement('button');
+            moreBtn.type = 'button';
+            moreBtn.style.cssText = 'padding:6px 11px; border-radius:8px; border:1px dashed #6c5ce7; background:#f6f3ff; color:#6c5ce7; font-size:0.78rem; font-weight:700; cursor:pointer;';
+            moreBtn.innerHTML = showFutureDuesMonths ? '미래 월 접기' : `＋ ${nowIdx + 2}~12월 더보기`;
+            moreBtn.onclick = () => { showFutureDuesMonths = !showFutureDuesMonths; updateQuickMonthArea(memberName); };
+            btnsDiv.appendChild(moreBtn);
         }
         const guide = document.createElement('div');
         guide.className = 'quick-month-guide';
@@ -3277,15 +3344,16 @@ window.uploadReceipt = async () => {
         document.getElementById('rDesc').value = '';
 
         // 4. 데이터 추가
-        window.receipts.unshift({ 
+        const newReceipt = { 
             id: Date.now(), 
             date: dt, 
             img: compressedDataUrl, 
             desc: d 
-        });
+        };
+        window.receipts.unshift(newReceipt);
         
-        // 5. 서버 저장 (비동기 대기)
-        await saveToFirebase();
+        // 5. 영수증 1건만 서버에 저장하고 실제 저장 여부까지 재확인
+        await persistReceiptItem(newReceipt);
 
         // 6. UI 갱신
         renderReceipts();
@@ -3425,7 +3493,7 @@ window.uploadReceipt = async () => {
                     r.date = newDate;
                     r.desc = newDesc;
                     
-                    saveToFirebase().then(() => {
+                    persistReceiptItem(r).then(() => {
                         alert("수정되었습니다.");
                         document.getElementById('receiptEditModal').style.display = 'none';
                         renderReceipts();
@@ -3438,7 +3506,7 @@ window.uploadReceipt = async () => {
             // 이미지는 그대로 두고 내용만 수정
             r.date = newDate;
             r.desc = newDesc;
-            saveToFirebase().then(() => {
+            persistReceiptItem(r).then(() => {
                 alert("수정되었습니다.");
                 document.getElementById('receiptEditModal').style.display = 'none';
                 renderReceipts();
@@ -3450,8 +3518,7 @@ window.uploadReceipt = async () => {
     window.deleteReceipt = (id) => { 
         if(confirm('이 영수증을 정말 삭제하시겠습니까?')) { 
             window.receipts = window.receipts.filter(r => r.id !== id); 
-            saveToFirebase(); 
-            renderReceipts(); 
+            deleteReceiptItem(id).then(() => renderReceipts()).catch(e => alert('영수증 삭제 저장 실패: ' + e.message));
             document.getElementById('imgModal').style.display = 'none'; 
         }
     }
@@ -3664,7 +3731,7 @@ window.uploadReceipt = async () => {
         const type = document.getElementById('editTransType').value; const el = document.getElementById('editTransCat'); el.innerHTML=''; 
         CATS[type].forEach(c => { const op = document.createElement('option'); op.value = c; op.innerText = c; if(c === sel) op.selected = true; el.appendChild(op); }); 
     }
-    window.saveTransEdit = () => { 
+    window.saveTransEdit = async () => { 
         const id = Number(document.getElementById('editTransId').value); const t = window.trans.find(x => x.id === id); 
         if(t) {
             t.date = document.getElementById('editTransDate').value;
@@ -3677,12 +3744,13 @@ window.uploadReceipt = async () => {
                 : null;
             t.memberId = matchedMember ? String(matchedMember.id ?? '') : '';
             t.memberNameSnapshot = matchedMember ? String(matchedMember.name || '') : '';
-            saveToFirebase();
+            try { await persistTransItem(t); }
+            catch(e) { return alert('수정 저장 확인 실패: ' + e.message); }
             renderAll();
             closeTransModal();
         }
     }
-    window.delTransFromModal = () => { if(confirm('삭제하시겠습니까?')){ const id = Number(document.getElementById('editTransId').value); window.trans = window.trans.filter(x => x.id !== id); saveToFirebase(); renderAll(); closeTransModal(); } }
+    window.delTransFromModal = async () => { if(confirm('삭제하시겠습니까?')){ const id = Number(document.getElementById('editTransId').value); window.trans = window.trans.filter(x => x.id !== id); try { await deleteTransItem(id); } catch(e) { return alert('삭제 저장 실패: ' + e.message); } renderAll(); closeTransModal(); } }
 // 리스트에서 쓰레기통 아이콘 클릭 시 즉시 삭제하는 함수 (추가 위치)
     window.deleteTransDirect = (id) => {
         if(!window.isAdmin) return alert('관리자 로그인이 필요합니다.');
@@ -3690,11 +3758,11 @@ window.uploadReceipt = async () => {
             // 선택한 ID만 제외하고 데이터 배열을 다시 만듭니다
             window.trans = window.trans.filter(x => x.id !== id);
             
-            // 서버에 저장하고 화면을 새로 그립니다
-            saveToFirebase().then(() => {
+            // 해당 장부 1건만 서버에서 삭제하고 삭제표시를 남깁니다
+            deleteTransItem(id).then(() => {
                 renderAll(); 
                 alert('삭제되었습니다.');
-            });
+            }).catch(e => alert('삭제 저장 실패: ' + e.message));
         }
     };
     // --- 내역 수정 모달 닫기 ---
