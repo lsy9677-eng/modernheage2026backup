@@ -590,6 +590,7 @@ th:first-child, td:first-child {
             <div class="backup-btns">
     <button class="btn-backup admin-only" onclick="changeAdminPassword()">🔑PW변경</button>
     <button class="btn-backup admin-only" onclick="exportData()">💾 백업</button>
+    <button class="btn-backup admin-only" onclick="createSafetyBaseline()">🛡️안전복사</button>
 
     <button class="btn-backup admin-only" onclick="document.getElementById('loadFile').click()">📂 복구</button>
     <button class="btn-save-exit admin-only" onclick="saveAndExit()">저장하고 나가기 🚪</button>
@@ -1198,13 +1199,14 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from
     // ✅ 앱별 데이터 분리 (회계앱 전용 네임스페이스)
     const BASE_PATH = ''; // 🚑 긴급복구: 기존(공용) 경로 사용
 const CLUB_ROOT = 'clubData';
+const SAFETY_ROOT = 'accountingSafety';
 
-
-
-
-// [2026-08-19 긴급수정]
-// 기존 마이그레이션 루틴은 clubData 전체 노드를 덮어쓸 수 있어 비활성화했습니다.
-// 신규 장부/영수증은 transItems/receiptItems에 건별 저장하며, 이 노드는 절대 일괄 덮어쓰지 않습니다.
+// [2026-08-19 데이터보호 강화]
+// 1) clubData 전체 덮어쓰기/자동 마이그레이션 금지
+// 2) 장부/영수증은 건별 원자적(update) 저장
+// 3) 같은 데이터를 clubData 밖 accountingSafety/liveMirror 에 동시 보관
+// 4) 수정/삭제 전 값은 accountingSafety/archive 에 이력 보관
+// 5) 앱 시작 시 liveMirror를 함께 읽어 누락 항목을 화면에서 자동 보완
 
 const auth = getAuth(app);
 
@@ -1352,43 +1354,50 @@ window.onload = () => {
             }
         }, 10000); // 10초 타임아웃
 
-        // Firebase 데이터 불러오기
+        // Firebase 데이터 불러오기: 본 데이터 + 별도 안전 미러를 합쳐서 표시
         const clubRef = ref(db, CLUB_ROOT);
-        onValue(clubRef, (snapshot) => {
-            document.getElementById('loadingOverlay').style.display = 'none'; // 로딩 해제
-            const data = snapshot.val();
-            if (data) {
-                const deletedTrans = data.deletedTrans || {};
-                const deletedReceipts = data.deletedReceipts || {};
-                const legacyTrans = Array.isArray(data.trans) ? data.trans : Object.values(data.trans || {});
-                const itemTrans = Object.values(data.transItems || {});
-                const transMap = new Map();
-                legacyTrans.forEach(x => { if (x && !deletedTrans[String(x.id)]) transMap.set(String(x.id), x); });
-                itemTrans.forEach(x => { if (x && !deletedTrans[String(x.id)]) transMap.set(String(x.id), x); });
-                window.trans = Array.from(transMap.values()).sort((a,b) => Number(b.id||0)-Number(a.id||0));
-               // 'members_acc'라는 별도 명단이 있으면 그걸 쓰고, 없으면 기존 'members'를 가져옵니다(최초 1회 복사)
-window.members = data.members_acc || data.members || [];
-                const legacyReceipts = Array.isArray(data.receipts) ? data.receipts : Object.values(data.receipts || {});
-                const itemReceipts = Object.values(data.receiptItems || {});
-                const receiptMap = new Map();
-                legacyReceipts.forEach(x => { if (x && !deletedReceipts[String(x.id)]) receiptMap.set(String(x.id), x); });
-                itemReceipts.forEach(x => { if (x && !deletedReceipts[String(x.id)]) receiptMap.set(String(x.id), x); });
-                window.receipts = Array.from(receiptMap.values()).sort((a,b) => Number(b.id||0)-Number(a.id||0));
-                window.events = data.events || [];
-                window.settings = data.settings || {};
-                
-                if(data.auditState) window.auditState = data.auditState;
-            } else {
-                saveToFirebase(); // 데이터 없으면 초기화
+        onValue(clubRef, async (snapshot) => {
+            document.getElementById('loadingOverlay').style.display = 'none';
+            const data = snapshot.val() || {};
+            let mirror = {};
+            try {
+                const mirrorSnap = await get(ref(db, `${SAFETY_ROOT}/liveMirror`));
+                mirror = mirrorSnap.val() || {};
+            } catch(e) {
+                console.warn('안전 미러 읽기 실패(본 데이터는 계속 사용):', e);
             }
-            // 설정 적용
-            if(window.settings && window.settings.fees) {
-                currentFees = { ...DEFAULT_FEES, ...window.settings.fees };
-            }
+
+            const deletedTrans = data.deletedTrans || {};
+            const deletedReceipts = data.deletedReceipts || {};
+            const legacyTrans = Array.isArray(data.trans) ? data.trans : Object.values(data.trans || {});
+            const itemTrans = Object.values(data.transItems || {});
+            const mirrorTrans = Object.values(mirror.transItems || {});
+            const transMap = new Map();
+            legacyTrans.forEach(x => { if (x && !deletedTrans[String(x.id)]) transMap.set(String(x.id), x); });
+            itemTrans.forEach(x => { if (x && !deletedTrans[String(x.id)]) transMap.set(String(x.id), x); });
+            mirrorTrans.forEach(x => { if (x && !deletedTrans[String(x.id)] && !transMap.has(String(x.id))) transMap.set(String(x.id), x); });
+            window.trans = Array.from(transMap.values()).sort((a,b) => Number(b.id||0)-Number(a.id||0));
+
+            window.members = data.members_acc || data.members || [];
+
+            const legacyReceipts = Array.isArray(data.receipts) ? data.receipts : Object.values(data.receipts || {});
+            const itemReceipts = Object.values(data.receiptItems || {});
+            const mirrorReceipts = Object.values(mirror.receiptItems || {});
+            const receiptMap = new Map();
+            legacyReceipts.forEach(x => { if (x && !deletedReceipts[String(x.id)]) receiptMap.set(String(x.id), x); });
+            itemReceipts.forEach(x => { if (x && !deletedReceipts[String(x.id)]) receiptMap.set(String(x.id), x); });
+            mirrorReceipts.forEach(x => { if (x && !deletedReceipts[String(x.id)] && !receiptMap.has(String(x.id))) receiptMap.set(String(x.id), x); });
+            window.receipts = Array.from(receiptMap.values()).sort((a,b) => Number(b.id||0)-Number(a.id||0));
+
+            window.events = data.events || [];
+            window.settings = data.settings || {};
+            if(data.auditState) window.auditState = data.auditState;
+
+            // 데이터가 비어 있어도 자동 초기화/덮어쓰기를 절대 하지 않음
+            if(window.settings && window.settings.fees) currentFees = { ...DEFAULT_FEES, ...window.settings.fees };
             setCategories();
             renderAll();
         }, (error) => {
-            // 에러 발생 시에도 로딩창 닫기
             document.getElementById('loadingOverlay').style.display = 'none';
             alert("데이터를 불러오는 중 오류가 발생했습니다: " + error.message);
         });
@@ -1403,39 +1412,118 @@ function cacheCurrentData() {
     } catch(e) { console.warn('안전 캐시 저장 실패:', e); }
 }
 
+async function safeGet(path) {
+    try {
+        const snap = await get(ref(db, path));
+        return snap.exists() ? snap.val() : null;
+    } catch(e) {
+        console.warn('기존값 확인 실패:', path, e);
+        return null;
+    }
+}
+
+function safetyStamp() {
+    return `${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+}
+
 async function persistTransItem(item) {
     cacheCurrentData();
-    const path = `${CLUB_ROOT}/transItems/${item.id}`;
-    await set(ref(db, path), item);
-    const check = await get(ref(db, path));
-    if (!check.exists()) throw new Error('장부 서버 확인 실패');
-    await remove(ref(db, `${CLUB_ROOT}/deletedTrans/${item.id}`));
+    const id = String(item.id);
+    const mainPath = `${CLUB_ROOT}/transItems/${id}`;
+    const mirrorPath = `${SAFETY_ROOT}/liveMirror/transItems/${id}`;
+    const old = await safeGet(mainPath);
+    const stamp = safetyStamp();
+    const updates = {};
+    updates[mainPath] = item;
+    updates[mirrorPath] = item;
+    updates[`${CLUB_ROOT}/deletedTrans/${id}`] = null;
+    updates[`${SAFETY_ROOT}/meta/lastWrite`] = { at:getKoreaTimestampISO(), type:'trans', id:id, action: old ? 'update' : 'create' };
+    if(old) updates[`${SAFETY_ROOT}/archive/transItems/${id}/${stamp}`] = old;
+    await update(ref(db), updates);
+    const [mainCheck, mirrorCheck] = await Promise.all([get(ref(db, mainPath)), get(ref(db, mirrorPath))]);
+    if(!mainCheck.exists() || !mirrorCheck.exists()) throw new Error('장부 이중 서버 저장 확인 실패');
 }
 
 async function deleteTransItem(id) {
     cacheCurrentData();
-    await Promise.all([
-        remove(ref(db, `${CLUB_ROOT}/transItems/${id}`)),
-        set(ref(db, `${CLUB_ROOT}/deletedTrans/${id}`), true)
-    ]);
+    id = String(id);
+    const mainPath = `${CLUB_ROOT}/transItems/${id}`;
+    const old = await safeGet(mainPath) || await safeGet(`${SAFETY_ROOT}/liveMirror/transItems/${id}`);
+    const stamp = safetyStamp();
+    const updates = {};
+    updates[mainPath] = null;
+    updates[`${CLUB_ROOT}/deletedTrans/${id}`] = true;
+    updates[`${SAFETY_ROOT}/liveMirror/transItems/${id}`] = null;
+    updates[`${SAFETY_ROOT}/meta/lastWrite`] = { at:getKoreaTimestampISO(), type:'trans', id:id, action:'delete' };
+    if(old) updates[`${SAFETY_ROOT}/archive/transItems/${id}/${stamp}`] = old;
+    await update(ref(db), updates);
 }
 
 async function persistReceiptItem(item) {
     cacheCurrentData();
-    const path = `${CLUB_ROOT}/receiptItems/${item.id}`;
-    await set(ref(db, path), item);
-    const check = await get(ref(db, path));
-    if (!check.exists() || !check.val().img) throw new Error('영수증 서버 확인 실패');
-    await remove(ref(db, `${CLUB_ROOT}/deletedReceipts/${item.id}`));
+    const id = String(item.id);
+    const mainPath = `${CLUB_ROOT}/receiptItems/${id}`;
+    const mirrorPath = `${SAFETY_ROOT}/liveMirror/receiptItems/${id}`;
+    const old = await safeGet(mainPath);
+    const stamp = safetyStamp();
+    const updates = {};
+    updates[mainPath] = item;
+    updates[mirrorPath] = item;
+    updates[`${CLUB_ROOT}/deletedReceipts/${id}`] = null;
+    updates[`${SAFETY_ROOT}/meta/lastWrite`] = { at:getKoreaTimestampISO(), type:'receipt', id:id, action: old ? 'update' : 'create' };
+    if(old) updates[`${SAFETY_ROOT}/archive/receiptItems/${id}/${stamp}`] = old;
+    await update(ref(db), updates);
+    const [mainCheck, mirrorCheck] = await Promise.all([get(ref(db, mainPath)), get(ref(db, mirrorPath))]);
+    if(!mainCheck.exists() || !mainCheck.val().img || !mirrorCheck.exists() || !mirrorCheck.val().img) {
+        throw new Error('영수증 이중 서버 저장 확인 실패');
+    }
 }
 
 async function deleteReceiptItem(id) {
     cacheCurrentData();
-    await Promise.all([
-        remove(ref(db, `${CLUB_ROOT}/receiptItems/${id}`)),
-        set(ref(db, `${CLUB_ROOT}/deletedReceipts/${id}`), true)
-    ]);
+    id = String(id);
+    const mainPath = `${CLUB_ROOT}/receiptItems/${id}`;
+    const old = await safeGet(mainPath) || await safeGet(`${SAFETY_ROOT}/liveMirror/receiptItems/${id}`);
+    const stamp = safetyStamp();
+    const updates = {};
+    updates[mainPath] = null;
+    updates[`${CLUB_ROOT}/deletedReceipts/${id}`] = true;
+    updates[`${SAFETY_ROOT}/liveMirror/receiptItems/${id}`] = null;
+    updates[`${SAFETY_ROOT}/meta/lastWrite`] = { at:getKoreaTimestampISO(), type:'receipt', id:id, action:'delete' };
+    if(old) updates[`${SAFETY_ROOT}/archive/receiptItems/${id}/${stamp}`] = old;
+    await update(ref(db), updates);
 }
+
+window.createSafetyBaseline = async () => {
+    if(!window.isAdmin) return alert('관리자 로그인이 필요합니다.');
+    if(!confirm('현재 장부와 영수증을 clubData 밖의 별도 안전영역에 복사합니다.\n기존 안전복사본은 지우지 않습니다. 계속하시겠습니까?')) return;
+    document.getElementById('loadingMsg').innerText = '안전 복사본 생성 중...';
+    document.getElementById('loadingOverlay').style.display = 'flex';
+    try {
+        // 장부는 이미지가 없어 한 번에 원자적으로 복사
+        const transUpdates = {};
+        (window.trans || []).forEach(x => {
+            if(x && x.id != null) transUpdates[`${SAFETY_ROOT}/liveMirror/transItems/${String(x.id)}`] = x;
+        });
+        transUpdates[`${SAFETY_ROOT}/meta/baseline`] = {
+            at:getKoreaTimestampISO(), transCount:(window.trans||[]).length, receiptCount:(window.receipts||[]).length
+        };
+        await update(ref(db), transUpdates);
+
+        // 영수증은 이미지가 커서 한 건씩 복사하여 대용량 일괄쓰기 실패 방지
+        let done = 0;
+        for(const x of (window.receipts || [])) {
+            if(!x || x.id == null) continue;
+            document.getElementById('loadingMsg').innerText = `영수증 안전복사 ${++done}/${(window.receipts||[]).length}`;
+            await set(ref(db, `${SAFETY_ROOT}/liveMirror/receiptItems/${String(x.id)}`), x);
+        }
+        alert('✅ 안전 복사본 생성 완료\n앞으로 새 장부/영수증은 본 데이터와 안전영역에 동시에 저장됩니다.');
+    } catch(e) {
+        alert('안전복사 실패: '+e.message+'\nFirebase 규칙에 accountingSafety 쓰기 권한이 있는지 확인하세요.');
+    } finally {
+        document.getElementById('loadingOverlay').style.display = 'none';
+    }
+};
 
 function saveToFirebase() {
     if(!window.isAdmin && !window.isAuditMode && window.trans.length > 0) return Promise.resolve();
@@ -3973,7 +4061,30 @@ window.uploadReceipt = async () => {
     }
     window.renderAll = () => { renderLedger(); renderStats(); renderMembers(); renderUnpaid(); renderReceipts(); renderCalendar(); updateAdminUI(); }
     window.exportData = () => { const d={trans:window.trans, members:window.members, receipts:window.receipts, events:window.events, settings:window.settings}; const b=new Blob([JSON.stringify(d)],{type:'application/json'}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download='backup.json'; a.click(); }
-    window.importData = (input) => { const f=input.files[0]; if(!f)return; const r=new FileReader(); r.onload=function(e){const d=JSON.parse(e.target.result); window.trans=d.trans||[]; window.members=d.members||[]; window.receipts=d.receipts||[]; window.events=d.events||[]; window.settings=d.settings||null; saveToFirebase(); alert('복구 완료'); location.reload();}; r.readAsText(f); }
+    window.importData = (input) => {
+        const f=input.files[0]; if(!f) return;
+        if(!confirm('백업 파일을 현재 데이터에 안전하게 병합합니다.\n기존 장부/영수증은 삭제하지 않습니다. 계속하시겠습니까?')) { input.value=''; return; }
+        const r=new FileReader();
+        r.onload=async function(e){
+            try {
+                const d=JSON.parse(e.target.result);
+                const stamp=safetyStamp();
+                const updates={};
+                (d.trans||[]).forEach(x=>{ if(x&&x.id!=null){ const id=String(x.id); updates[`${CLUB_ROOT}/transItems/${id}`]=x; updates[`${SAFETY_ROOT}/liveMirror/transItems/${id}`]=x; updates[`${CLUB_ROOT}/deletedTrans/${id}`]=null; }});
+                (d.receipts||[]).forEach(x=>{ if(x&&x.id!=null){ const id=String(x.id); updates[`${CLUB_ROOT}/receiptItems/${id}`]=x; updates[`${SAFETY_ROOT}/liveMirror/receiptItems/${id}`]=x; updates[`${CLUB_ROOT}/deletedReceipts/${id}`]=null; }});
+                if(Array.isArray(d.members)) updates[`${CLUB_ROOT}/members_acc`]=d.members;
+                if(Array.isArray(d.events)) updates[`${CLUB_ROOT}/events`]=d.events;
+                if(d.settings) updates[`${CLUB_ROOT}/settings`]=d.settings;
+                updates[`${SAFETY_ROOT}/meta/lastImport`]={at:getKoreaTimestampISO(), file:f.name, stamp};
+                await update(ref(db), updates);
+                alert('✅ 안전 병합 복구 완료');
+                location.reload();
+            } catch(err) {
+                alert('복구 실패: '+err.message);
+            } finally { input.value=''; }
+        };
+        r.readAsText(f);
+    }
 
     
     window.openEditTrans = (id) => { 
