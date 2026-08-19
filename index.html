@@ -1202,36 +1202,10 @@ const CLUB_ROOT = 'clubData';
 
 
 
-async function MIGRATE_OLD_CLUBDATA_TO_ACCOUNTING_NS(){
-      const flagKey = 'MIGRATED_ACCOUNTING_NS_V1';
-      if (localStorage.getItem(flagKey) === '1') return;
+// [2026-08-19 긴급수정]
+// 기존 마이그레이션 루틴은 clubData 전체 노드를 덮어쓸 수 있어 비활성화했습니다.
+// 신규 장부/영수증은 transItems/receiptItems에 건별 저장하며, 이 노드는 절대 일괄 덮어쓰지 않습니다.
 
-      try{
-        const oldSnap = await get(ref(db, 'clubData'));
-        const oldData = oldSnap.val();
-        if (!oldData) { localStorage.setItem(flagKey,'1'); return; }
-
-        // 회계앱에서 쓰는 가지만 복사
-        const pick = {};
-        if (oldData.trans) pick.trans = oldData.trans;
-        if (oldData.members_acc) pick.members_acc = oldData.members_acc;
-        if (oldData.receipts) pick.receipts = oldData.receipts;
-        if (oldData.events) pick.events = oldData.events;
-        if (oldData.settings) pick.settings = oldData.settings;
-        if (oldData.auditState) pick.auditState = oldData.auditState;
-
-        if (Object.keys(pick).length){
-          await update(ref(db), {
-            [CLUB_ROOT]: pick
-          });
-        }
-        localStorage.setItem(flagKey,'1');
-      }catch(e){
-        console.warn('회계앱 NS 마이그레이션 실패(무시 가능):', e);
-      }
-    }
-
-    MIGRATE_OLD_CLUBDATA_TO_ACCOUNTING_NS();
 const auth = getAuth(app);
 
 // 리스트에서 즉시 삭제하는 기능 추가

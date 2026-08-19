@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>모던 회계 긴급 복구 도구</title>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;background:#f5f6f8;margin:0;color:#222}main{max-width:760px;margin:auto;padding:18px}.card{background:#fff;border-radius:16px;padding:18px;margin:12px 0;box-shadow:0 3px 14px #0001}.bad{color:#c0392b;font-weight:800}.ok{color:#087f5b;font-weight:800}.muted{color:#777;font-size:.9rem}button,input{font:inherit}button{border:0;border-radius:12px;padding:12px 14px;margin:5px 4px 5px 0;font-weight:700;cursor:pointer}.primary{background:#203a43;color:#fff}.safe{background:#d3f9d8}.warn{background:#fff3bf}.danger{background:#ffe3e3}input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #ddd;border-radius:10px;margin:5px 0}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.big{font-size:1.2rem;font-weight:800}pre{white-space:pre-wrap;word-break:break-word;background:#f8f9fa;padding:12px;border-radius:10px;max-height:260px;overflow:auto}#log{font-size:.9rem}.hidden{display:none}
+</style></head>
+<body><main>
+<div class="card"><div class="big">🚑 모던 회계 긴급 복구 도구</div><p class="bad">먼저 이 페이지에서는 자동으로 서버에 아무것도 쓰지 않습니다.</p><p class="muted">같은 pickle-6pw.pages.dev 출처에서 열어야 기존 브라우저의 로컬 안전 캐시를 읽을 수 있습니다.</p></div>
+<div class="card"><div class="big">1. 현재 상태 확인</div><button class="primary" id="btnCheck">로컬 캐시 · 서버 비교</button><button class="safe" id="btnLocalDownload">로컬 캐시 JSON 저장</button><button class="safe" id="btnServerDownload">서버 현재 JSON 저장</button><div id="summary"></div></div>
+<div class="card"><div class="big">2. 복구가 필요할 때만 로그인</div><input id="email" type="email" placeholder="관리자 이메일"><input id="pw" type="password" placeholder="관리자 비밀번호"><button class="primary" id="btnLogin">관리자 로그인</button><span id="authState" class="muted">로그인 안 됨</span></div>
+<div class="card"><div class="big">3. 누락 자료만 복구</div><p class="muted">로컬 캐시에 있고 서버에 없는 장부/영수증만 건별로 복구합니다. 기존 서버 자료는 덮어쓰지 않습니다.</p><button class="warn" id="btnRestore" disabled>누락 자료 복구 실행</button><div id="restoreInfo" class="muted"></div></div>
+<div class="card"><div class="big">진단 로그</div><pre id="log">대기 중...</pre></div>
+</main>
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+import {getDatabase,ref,get,set,remove} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+import {getAuth,signInWithEmailAndPassword,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+const firebaseConfig={apiKey:'AIzaSyA3m3yVAGDsG_O-joG2TXAVn8akJJA_Q1s',authDomain:'modern-account-2026.firebaseapp.com',databaseURL:'https://modern-account-2026-default-rtdb.firebaseio.com',projectId:'modern-account-2026',storageBucket:'modern-account-2026.firebasestorage.app',messagingSenderId:'533377628318',appId:'1:533377628318:web:eef8c36ca949d54e85e38f'};
+const app=initializeApp(firebaseConfig), db=getDatabase(app), auth=getAuth(app), ROOT='clubData';
+let state={local:null,server:null,missingT:[],missingR:[]};
+const $=id=>document.getElementById(id); const log=t=>{$('log').textContent=new Date().toLocaleTimeString()+' '+t+'\n'+$('log').textContent};
+function arr(v){return Array.isArray(v)?v:Object.values(v||{})}
+function dl(name,obj){const b=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function ids(a){return new Set((a||[]).filter(Boolean).map(x=>String(x.id)))}
+async function readServer(){const s=await get(ref(db,ROOT));return s.val()||{}}
+function readLocal(){try{return JSON.parse(localStorage.getItem('modernAccountSafetyCacheV2')||'null')}catch(e){return null}}
+async function check(){
+ state.local=readLocal(); state.server=await readServer();
+ const st=[...arr(state.server.trans),...arr(state.server.transItems)]; const sr=[...arr(state.server.receipts),...arr(state.server.receiptItems)];
+ const ti=ids(st), ri=ids(sr); const lt=state.local?.trans||[], lr=state.local?.receipts||[];
+ state.missingT=lt.filter(x=>x&&x.id!=null&&!ti.has(String(x.id))); state.missingR=lr.filter(x=>x&&x.id!=null&&!ri.has(String(x.id)));
+ const ldate=state.local?.savedAt||'없음';
+ $('summary').innerHTML=`<p>로컬 안전캐시: <b>${state.local?'있음':'없음'}</b> / 저장시각 ${ldate}</p><p>로컬 장부 ${lt.length}건 · 서버 장부 ${st.length}건 · <span class="bad">서버 누락 후보 ${state.missingT.length}건</span></p><p>로컬 영수증 ${lr.length}건 · 서버 영수증 ${sr.length}건 · <span class="bad">서버 누락 후보 ${state.missingR.length}건</span></p>`;
+ $('restoreInfo').textContent=`복구 후보: 장부 ${state.missingT.length}건, 영수증 ${state.missingR.length}건`;
+ $('btnRestore').disabled=!(auth.currentUser && (state.missingT.length||state.missingR.length));
+ log(`비교 완료: 장부 누락 ${state.missingT.length}, 영수증 누락 ${state.missingR.length}`)
+}
+$('btnCheck').onclick=()=>check().catch(e=>log('오류: '+e.message));
+$('btnLocalDownload').onclick=()=>{const x=readLocal(); if(!x)return alert('이 브라우저에 로컬 안전캐시가 없습니다.'); dl('modern_local_safety_cache_'+Date.now()+'.json',x)};
+$('btnServerDownload').onclick=async()=>{const x=await readServer();dl('modern_server_snapshot_'+Date.now()+'.json',x)};
+$('btnLogin').onclick=async()=>{try{await signInWithEmailAndPassword(auth,$('email').value.trim(),$('pw').value);$('pw').value=''}catch(e){alert('로그인 실패: '+e.message)}};
+onAuthStateChanged(auth,u=>{$('authState').textContent=u?'로그인 됨: '+u.email:'로그인 안 됨';$('btnRestore').disabled=!(u&&(state.missingT.length||state.missingR.length))});
+$('btnRestore').onclick=async()=>{
+ if(!auth.currentUser)return alert('관리자 로그인이 필요합니다.'); if(!confirm(`장부 ${state.missingT.length}건, 영수증 ${state.missingR.length}건을 서버에 건별 복구할까요? 기존 자료는 덮어쓰지 않습니다.`))return;
+ $('btnRestore').disabled=true; let okT=0,okR=0;
+ try{
+  const fresh=await readServer(); const sti=ids([...arr(fresh.trans),...arr(fresh.transItems)]), sri=ids([...arr(fresh.receipts),...arr(fresh.receiptItems)]);
+  for(const x of state.missingT){if(sti.has(String(x.id)))continue; await set(ref(db,`${ROOT}/transItems/${x.id}`),x); await remove(ref(db,`${ROOT}/deletedTrans/${x.id}`)); okT++}
+  for(const x of state.missingR){if(sri.has(String(x.id)))continue; await set(ref(db,`${ROOT}/receiptItems/${x.id}`),x); await remove(ref(db,`${ROOT}/deletedReceipts/${x.id}`)); okR++}
+  log(`복구 완료: 장부 ${okT}건, 영수증 ${okR}건`); alert(`복구 완료\n장부 ${okT}건\n영수증 ${okR}건`); await check();
+ }catch(e){log('복구 실패: '+e.message);alert('복구 중 오류: '+e.message)} finally {$('btnRestore').disabled=false}
+};
+</script></body></html>
