@@ -222,6 +222,10 @@ th:first-child, td:first-child {
         .autocomplete-item:hover, .autocomplete-item.selected { background: #f0fffe; }
         .autocomplete-item .ac-name { font-weight: 700; }
         .autocomplete-item .ac-fee { font-size: 0.78rem; color: #00b894; font-weight: 600; }
+        .autocomplete-history-meta { font-size:0.72rem; color:#636e72; margin-top:3px; display:flex; gap:8px; flex-wrap:wrap; }
+        .autocomplete-history-badge { font-size:0.68rem; padding:2px 7px; border-radius:999px; background:#f1f3f5; color:#636e72; font-weight:700; }
+        .autocomplete-history-amount { color:#0984e3; font-weight:800; white-space:nowrap; }
+        .autocomplete-history-expense .autocomplete-history-amount { color:#d63031; }
 
         .ledger-entry-main { display:flex; align-items:center; width:100%; gap:10px; }
         .ledger-entry-info { flex:1; min-width:0; }
@@ -2245,7 +2249,59 @@ function checkRoleMatch(memberRole, groupKey) {
     }
 
     // ✅ 장부 자동완성 & 빠른 월 선택
+    // 회원 회비/가입비는 기존 회원 자동완성을 유지하고,
+    // 그 외 수입·지출은 과거 장부 데이터에서 내용/금액/항목을 찾아 자동완성한다.
     let acSelectedIdx = -1;
+
+    function escapeHtmlText(v) {
+        return String(v ?? '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    function normalizeLedgerKeyword(v) {
+        return String(v || '').toLowerCase().replace(/\s+/g, '').trim();
+    }
+
+    function buildLedgerHistorySuggestions(keyword, type) {
+        const q = normalizeLedgerKeyword(keyword);
+        if (!q) return [];
+        const rows = Array.isArray(window.trans) ? window.trans : [];
+        const grouped = new Map();
+
+        rows.forEach((t, idx) => {
+            if (!t || t.type !== type || !t.desc) return;
+            const desc = String(t.desc).trim();
+            const norm = normalizeLedgerKeyword(desc);
+            if (!norm || !norm.includes(q)) return;
+            const amt = Number(t.amt || 0);
+            const cat = String(t.cat || '');
+            // 같은 내용+금액+항목은 하나로 묶어 최근 사용일과 사용횟수를 보여준다.
+            const key = `${type}|${cat}|${amt}|${norm}`;
+            const dateNum = Number(String(t.date || '').replace(/-/g, '')) || 0;
+            const idNum = Number(t.id || 0);
+            const rankRecency = dateNum * 10000000000000 + idNum;
+            let score = 0;
+            if (norm === q) score += 10000;
+            if (norm.startsWith(q)) score += 5000;
+            score += Math.min(q.length * 50, 1000);
+            const existing = grouped.get(key);
+            if (!existing) {
+                grouped.set(key, { desc, amt, cat, type, date:t.date || '', count:1, score, rankRecency, firstIdx:idx });
+            } else {
+                existing.count += 1;
+                existing.score += 25;
+                if (rankRecency > existing.rankRecency) {
+                    existing.rankRecency = rankRecency;
+                    existing.date = t.date || existing.date;
+                }
+            }
+        });
+
+        return Array.from(grouped.values())
+            .sort((a,b) => (b.score-a.score) || (b.rankRecency-a.rankRecency) || (a.firstIdx-b.firstIdx))
+            .slice(0, 8);
+    }
 
     window.onDescInput = () => {
         const cat = document.getElementById('tCat').value;
@@ -2254,37 +2310,76 @@ function checkRoleMatch(memberRole, groupKey) {
         const list = document.getElementById('acList');
         acSelectedIdx = -1;
 
-        // 월회비/가입비일 때만 자동완성
-        if (type !== 'income' || !['월회비','가입비'].includes(cat)) { list.classList.remove('show'); return; }
+        // 월회비/가입비는 기존 회원 자동완성
+        if (type === 'income' && ['월회비','가입비'].includes(cat)) {
+            const filtered = window.members.filter(m =>
+                !EXCLUDED_STATUSES.includes(m.status) && m.name && m.name.includes(val.trim())
+            ).slice(0, 8);
 
-        const filtered = window.members.filter(m =>
-            !EXCLUDED_STATUSES.includes(m.status) && m.name && m.name.includes(val.trim())
-        ).slice(0, 8);
+            if (!val.trim() || filtered.length === 0) { list.classList.remove('show'); return; }
 
-        if (!val.trim() || filtered.length === 0) { list.classList.remove('show'); return; }
-
-        list.innerHTML = filtered.map((m, i) => {
-            const fee = currentFees[m.status] || 0;
-            const sums = getMemberSums(m);
-            const unpaidInfo = getUnpaidInfo(m);
-            const paidMonths = (m.paid || []).filter(Boolean).length;
-            const unpaidMonthsText = unpaidInfo.months.length > 0 ? `미납: ${unpaidInfo.months.join(', ')}` : '미납 없음';
-            const hasPhone = !!normalizePhone(m.phone);
-            const phoneBadge = hasPhone ? '' : `<span style="font-size:0.7rem; font-weight:800; color:#d63031; background:#fff0f1; border:1px solid #ffcdd2; padding:2px 8px; border-radius:999px;">📵 번호없음</span>`;
-            return `<div class="autocomplete-item" data-name="${m.name}" data-fee="${fee}" data-status="${m.status}" onmousedown="selectAcItem(this)">
-                <div style="display:flex; flex-direction:column; gap:2px; flex:1;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span class="ac-name">${m.name}</span>
-                        <span class="ac-fee">${m.status} · 월 ${fee.toLocaleString()}원</span> ${phoneBadge}
+            list.innerHTML = filtered.map((m) => {
+                const fee = currentFees[m.status] || 0;
+                const sums = getMemberSums(m);
+                const unpaidInfo = getUnpaidInfo(m);
+                const paidMonths = (m.paid || []).filter(Boolean).length;
+                const unpaidMonthsText = unpaidInfo.months.length > 0 ? `미납: ${unpaidInfo.months.join(', ')}` : '미납 없음';
+                const hasPhone = !!normalizePhone(m.phone);
+                const phoneBadge = hasPhone ? '' : `<span style="font-size:0.7rem; font-weight:800; color:#d63031; background:#fff0f1; border:1px solid #ffcdd2; padding:2px 8px; border-radius:999px;">📵 번호없음</span>`;
+                return `<div class="autocomplete-item" data-name="${escapeHtmlText(m.name)}" data-fee="${fee}" data-status="${escapeHtmlText(m.status)}" onmousedown="selectAcItem(this)">
+                    <div style="display:flex; flex-direction:column; gap:2px; flex:1;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span class="ac-name">${escapeHtmlText(m.name)}</span>
+                            <span class="ac-fee">${escapeHtmlText(m.status)} · 월 ${fee.toLocaleString()}원</span> ${phoneBadge}
+                        </div>
+                        <div style="display:flex; justify-content:space-between; font-size:0.72rem; color:#636e72;">
+                            <span>납부 <b style="color:#0984e3;">${sums.dues.toLocaleString()}원</b> (${paidMonths}개월)</span>
+                            <span style="color:${unpaidInfo.months.length > 0 ? '#d63031' : '#00b894'};">${escapeHtmlText(unpaidMonthsText)}</span>
+                        </div>
                     </div>
-                    <div style="display:flex; justify-content:space-between; font-size:0.72rem; color:#636e72;">
-                        <span>납부 <b style="color:#0984e3;">${sums.dues.toLocaleString()}원</b> (${paidMonths}개월)</span>
-                        <span style="color:${unpaidInfo.months.length > 0 ? '#d63031' : '#00b894'};">${unpaidMonthsText}</span>
+                </div>`;
+            }).join('');
+            list.classList.add('show');
+            return;
+        }
+
+        // 그 외 수입/지출은 기존 장부에서 내용·항목·금액 자동완성
+        const suggestions = buildLedgerHistorySuggestions(val, type);
+        if (!val.trim() || suggestions.length === 0) { list.classList.remove('show'); return; }
+
+        list.innerHTML = suggestions.map((s) => {
+            const kindLabel = type === 'income' ? '수입' : '지출';
+            const cls = type === 'expense' ? ' autocomplete-history-expense' : '';
+            return `<div class="autocomplete-item${cls}" data-history="1"
+                        data-desc="${escapeHtmlText(s.desc)}" data-amt="${s.amt}" data-cat="${escapeHtmlText(s.cat)}"
+                        onmousedown="selectLedgerHistoryItem(this)">
+                <div style="display:flex; flex-direction:column; gap:2px; flex:1; min-width:0;">
+                    <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+                        <span class="ac-name" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtmlText(s.desc)}</span>
+                        <span class="autocomplete-history-amount">${s.amt.toLocaleString()}원</span>
+                    </div>
+                    <div class="autocomplete-history-meta">
+                        <span class="autocomplete-history-badge">${kindLabel}</span>
+                        <span class="autocomplete-history-badge">${escapeHtmlText(s.cat || '항목없음')}</span>
+                        ${s.date ? `<span>최근 ${escapeHtmlText(s.date)}</span>` : ''}
+                        ${s.count > 1 ? `<span>${s.count}회 사용</span>` : ''}
                     </div>
                 </div>
             </div>`;
         }).join('');
         list.classList.add('show');
+    };
+
+    window.selectLedgerHistoryItem = (el) => {
+        const desc = el.dataset.desc || '';
+        const amt = Number(el.dataset.amt || 0);
+        const cat = el.dataset.cat || '';
+        const catSelect = document.getElementById('tCat');
+        document.getElementById('tDesc').value = desc;
+        if (amt > 0) document.getElementById('tAmt').value = amt;
+        if (cat && Array.from(catSelect.options).some(op => op.value === cat)) catSelect.value = cat;
+        document.getElementById('acList').classList.remove('show');
+        document.getElementById('tDesc').focus();
     };
 
     window.selectAcItem = (el) => {
@@ -2307,7 +2402,13 @@ function checkRoleMatch(memberRole, groupKey) {
         if (!items.length) return;
         if (e.key === 'ArrowDown') { acSelectedIdx = Math.min(acSelectedIdx+1, items.length-1); }
         else if (e.key === 'ArrowUp') { acSelectedIdx = Math.max(acSelectedIdx-1, 0); }
-        else if (e.key === 'Enter' && acSelectedIdx >= 0) { e.preventDefault(); items[acSelectedIdx].dispatchEvent(new MouseEvent('mousedown')); return; }
+        else if (e.key === 'Enter' && acSelectedIdx >= 0) {
+            e.preventDefault();
+            const target = items[acSelectedIdx];
+            if (target.dataset.history === '1') selectLedgerHistoryItem(target);
+            else selectAcItem(target);
+            return;
+        }
         else { return; }
         items.forEach((el,i) => el.classList.toggle('selected', i===acSelectedIdx));
     };
