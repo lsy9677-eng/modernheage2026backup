@@ -674,6 +674,12 @@ th:first-child, td:first-child {
                 <input type="search" id="ledgerSearch" placeholder="이름·내용·항목·금액 검색" autocomplete="off" oninput="onLedgerSearchInput()">
                 <button type="button" class="ledger-search-clear" id="ledgerSearchClear" onclick="clearLedgerSearch()" aria-label="검색어 지우기">×</button>
             </div>
+            <label class="filter-label">영수증 상태</label>
+            <div class="chip-group" id="receiptStatusChips">
+                <button class="filter-chip active" onclick="toggleReceiptStatus(this, 'all')">전체</button>
+                <button class="filter-chip" id="receiptMissingChip" onclick="toggleReceiptStatus(this, 'missing')">🧾 미등록</button>
+                <button class="filter-chip" id="receiptDoneChip" onclick="toggleReceiptStatus(this, 'done')">✅ 등록완료</button>
+            </div>
             <label class="filter-label">월 선택</label>
             <div class="chip-group" id="monthChips">
                 <button class="filter-chip active" onclick="toggleMonth(this, 'all')">전체</button>
@@ -1315,6 +1321,7 @@ const ROLE_GROUPS_DEF = {
     window.curCalDate = getKoreaDateObject();
     window.selectedMonths = new Set([formatKoreaISODate().substring(5, 7)]); 
     window.selectedCats = new Set(['all']);
+    window.receiptStatusFilter = 'all';
     window.isAdmin = false; 
     window.isAuditMode = false; 
 window.excludeInactive = false; // 휴,탈회 제외 상태 변수
@@ -2247,6 +2254,14 @@ window.addTrans = async () => {
         });
     }
 
+    window.toggleReceiptStatus = (btn, val) => {
+        window.receiptStatusFilter = val || 'all';
+        document.querySelectorAll('#receiptStatusChips .filter-chip').forEach(b => b.classList.remove('active'));
+        if (btn) btn.classList.add('active');
+        window.curLedgerPage = 1;
+        renderLedger();
+    }
+
     window.toggleMonth = (btn, val) => {
         if(val==='all') {
             window.selectedMonths.clear();
@@ -2322,6 +2337,20 @@ window.renderLedger = () => {
         return haystack.includes(searchRaw) || haystack.replace(/\s+/g, '').includes(searchCompact);
     });
 
+    // 영수증 상태 필터: 현재 검색/월/항목 조건 안에서 미등록·등록완료 건수를 바로 확인
+    const receiptMissingCount = filtered.filter(t => t.type === 'expense' && !getReceiptForTransaction(t.id)).length;
+    const receiptDoneCount = filtered.filter(t => t.type === 'expense' && !!getReceiptForTransaction(t.id)).length;
+    const missingChip = document.getElementById('receiptMissingChip');
+    const doneChip = document.getElementById('receiptDoneChip');
+    if (missingChip) missingChip.innerText = `🧾 미등록 ${receiptMissingCount}`;
+    if (doneChip) doneChip.innerText = `✅ 등록완료 ${receiptDoneCount}`;
+
+    if (window.receiptStatusFilter === 'missing') {
+        filtered = filtered.filter(t => t.type === 'expense' && !getReceiptForTransaction(t.id));
+    } else if (window.receiptStatusFilter === 'done') {
+        filtered = filtered.filter(t => t.type === 'expense' && !!getReceiptForTransaction(t.id));
+    }
+
     // 2. [추가] 날짜순 정렬 (최신 날짜가 위로 오게 정렬)
     filtered.sort((a, b) => {
         // 날짜를 비교하고, 날짜가 같다면 ID(생성시간) 순으로 정렬합니다.
@@ -2369,8 +2398,9 @@ window.renderLedger = () => {
                             ${t.type==='income'?'+':'-'}${formatStandard(t.amt)}
                         </div>
                         <div class="item-actions">
-                            <i class="fas fa-edit" style="color:#3498db; cursor:pointer; margin-left:5px;" onclick="openEditTrans(${t.id})"></i>
-                            <i class="fas fa-trash" style="color:#e74c3c; cursor:pointer; margin-left:5px;" onclick="deleteTransDirect(${t.id})"></i>
+                            <i class="fas fa-copy" title="이 내역 다시 입력" style="color:#00a884; cursor:pointer; margin-left:5px;" onclick="event.stopPropagation(); reuseTrans(${t.id})"></i>
+                            <i class="fas fa-edit" title="수정" style="color:#3498db; cursor:pointer; margin-left:5px;" onclick="openEditTrans(${t.id})"></i>
+                            <i class="fas fa-trash" title="삭제" style="color:#e74c3c; cursor:pointer; margin-left:5px;" onclick="deleteTransDirect(${t.id})"></i>
                         </div>
                     </div>
                 </div>
@@ -4643,6 +4673,36 @@ window.uploadReceipt = async () => {
         const type = document.getElementById('editTransType').value; const el = document.getElementById('editTransCat'); el.innerHTML=''; 
         CATS[type].forEach(c => { const op = document.createElement('option'); op.value = c; op.innerText = c; if(c === sel) op.selected = true; el.appendChild(op); }); 
     }
+    // ✅ [4단계] 기존 장부를 오늘 날짜 입력폼으로 복사
+    window.reuseTrans = (id) => {
+        if(!window.isAdmin) return alert('관리자 로그인이 필요합니다.');
+        const t = window.trans.find(x => x.id === id);
+        if(!t) return;
+
+        const dateEl = document.getElementById('tDate');
+        const typeEl = document.getElementById('tType');
+        const catEl = document.getElementById('tCat');
+        const amtEl = document.getElementById('tAmt');
+        const descEl = document.getElementById('tDesc');
+        if(!dateEl || !typeEl || !catEl || !amtEl || !descEl) return;
+
+        dateEl.value = formatKoreaISODate();
+        typeEl.value = t.type;
+        setCategories();
+        catEl.value = t.cat;
+        amtEl.value = t.amt;
+        descEl.value = t.desc || '';
+
+        // 복사 후 사용자가 확인하고 '입력 완료'를 눌러 저장하도록 자동 저장은 하지 않음
+        if (typeof hideAutocomplete === 'function') hideAutocomplete();
+        const formCard = dateEl.closest('.card');
+        if(formCard) formCard.scrollIntoView({behavior:'smooth', block:'start'});
+        setTimeout(() => {
+            descEl.focus();
+            try { descEl.setSelectionRange(descEl.value.length, descEl.value.length); } catch(e) {}
+        }, 350);
+    };
+
     window.saveTransEdit = async () => { 
         const id = Number(document.getElementById('editTransId').value); const t = window.trans.find(x => x.id === id); 
         if(t) {
