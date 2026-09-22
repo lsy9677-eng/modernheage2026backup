@@ -2541,10 +2541,81 @@ function checkRoleMatch(memberRole, groupKey) {
             .slice(0, 8);
     }
 
+    // 2026-09-23 1단계: 세부내용을 먼저 입력하면 과거 장부에서 수입/지출·카테고리를 추정해 자동 선택
+    function inferLedgerTypeCategory(keyword) {
+        const q = normalizeLedgerKeyword(keyword);
+        if (!q) return null;
+        const rows = Array.isArray(window.trans) ? window.trans : [];
+        const groups = new Map();
+
+        rows.forEach((t, idx) => {
+            if (!t || !t.desc || !t.type || !t.cat) return;
+            if (!CATS[t.type] || !CATS[t.type].includes(t.cat)) return;
+            const norm = normalizeLedgerKeyword(t.desc);
+            if (!norm || !norm.includes(q)) return;
+
+            const key = `${t.type}|${t.cat}`;
+            const dateNum = Number(String(t.date || '').replace(/-/g, '')) || 0;
+            const idNum = Number(t.id || 0);
+            const recency = dateNum * 10000000000000 + idNum;
+            let weight = 1;
+            if (norm === q) weight += 8;
+            else if (norm.startsWith(q)) weight += 3;
+
+            const g = groups.get(key) || {
+                type: t.type, cat: t.cat, count: 0, weighted: 0, recency: 0, firstIdx: idx
+            };
+            g.count += 1;
+            g.weighted += weight;
+            g.recency = Math.max(g.recency, recency);
+            groups.set(key, g);
+        });
+
+        const ranked = Array.from(groups.values()).sort((a,b) =>
+            (b.weighted-a.weighted) || (b.count-a.count) || (b.recency-a.recency) || (a.firstIdx-b.firstIdx)
+        );
+        if (!ranked.length) return null;
+
+        const top = ranked[0];
+        const second = ranked[1];
+        // 한 종류로만 사용됐거나, 과거 사용 패턴이 충분히 우세할 때만 자동 선택한다.
+        const clear = !second || top.weighted >= second.weighted * 2 || top.count >= second.count + 2;
+        if (!clear) return null;
+        return top;
+    }
+
+    function applySmartLedgerCategory(keyword) {
+        const typeEl = document.getElementById('tType');
+        const catEl = document.getElementById('tCat');
+        if (!typeEl || !catEl) return null;
+
+        // 회비/가입비 입력 중에는 회원 자동완성 흐름을 우선한다.
+        if (typeEl.value === 'income' && ['월회비','가입비'].includes(catEl.value)) {
+            const q = String(keyword || '').trim();
+            if (q && window.members.some(m => !EXCLUDED_STATUSES.includes(m.status) && m.name && m.name.includes(q))) return null;
+        }
+
+        const guess = inferLedgerTypeCategory(keyword);
+        if (!guess) return null;
+
+        if (typeEl.value !== guess.type) {
+            typeEl.value = guess.type;
+            setCategories();
+        }
+        if (Array.from(catEl.options).some(op => op.value === guess.cat)) {
+            catEl.value = guess.cat;
+            catEl.dataset.autoSuggested = '1';
+            catEl.style.boxShadow = '0 0 0 3px rgba(0,184,148,.13)';
+            setTimeout(() => { if (catEl.dataset.autoSuggested === '1') catEl.style.boxShadow = ''; }, 700);
+        }
+        return guess;
+    }
+
     window.onDescInput = () => {
+        const val = document.getElementById('tDesc').value;
+        applySmartLedgerCategory(val);
         const cat = document.getElementById('tCat').value;
         const type = document.getElementById('tType').value;
-        const val = document.getElementById('tDesc').value;
         const list = document.getElementById('acList');
         acSelectedIdx = -1;
 
