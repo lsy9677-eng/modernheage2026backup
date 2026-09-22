@@ -207,10 +207,11 @@ th:first-child, td:first-child {
         /* ✅ 장부 입력 자동완성 */
         .autocomplete-wrap { position: relative; }
         .autocomplete-list {
-            position: absolute; top: 100%; left: 0; right: 0; z-index: 9999;
+            /* 2026-09-23: 자동완성 목록이 다음 카드에 가려지지 않도록 입력 영역 안에서 펼쳐 표시 */
+            position: relative; top: auto; left: auto; right: auto; z-index: 5;
             background: #fff; border: 1px solid #dfe6e9; border-radius: 10px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.12); max-height: 200px;
-            overflow-y: auto; display: none;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12); max-height: none;
+            overflow: visible; display: none; margin-top: 6px;
         }
         .autocomplete-list.show { display: block; }
         .autocomplete-item {
@@ -226,6 +227,18 @@ th:first-child, td:first-child {
         .autocomplete-history-badge { font-size:0.68rem; padding:2px 7px; border-radius:999px; background:#f1f3f5; color:#636e72; font-weight:700; }
         .autocomplete-history-amount { color:#0984e3; font-weight:800; white-space:nowrap; }
         .autocomplete-history-expense .autocomplete-history-amount { color:#d63031; }
+        .autocomplete-recent-title { padding:9px 12px 6px; font-size:.72rem; color:#636e72; font-weight:800; background:#f8f9fa; border-bottom:1px solid #f1f2f6; }
+        .autocomplete-recent-title b { color:#2d3436; }
+        /* 2026-09-23 2단계: 세부내용 기반 카테고리 추천 */
+        .smart-cat-recommend { display:none; margin:-2px 0 10px; padding:10px 11px; background:#f8fbff; border:1px solid #dbeafe; border-radius:12px; }
+        .smart-cat-recommend.show { display:block; }
+        .smart-cat-title { font-size:.72rem; color:#636e72; margin-bottom:7px; font-weight:700; }
+        .smart-cat-chips { display:flex; flex-wrap:wrap; gap:6px; }
+        .smart-cat-chip { border:1px solid #cfd8e3; background:#fff; color:#2d3436; border-radius:999px; padding:7px 10px; font-size:.75rem; font-weight:800; cursor:pointer; box-shadow:0 2px 5px rgba(0,0,0,.04); }
+        .smart-cat-chip.expense { color:#c0392b; border-color:#ffd0cc; background:#fff8f7; }
+        .smart-cat-chip.income { color:#0875c1; border-color:#c9e5ff; background:#f7fbff; }
+        .smart-cat-chip small { font-size:.66rem; font-weight:600; color:#7f8c8d; margin-left:4px; }
+        .smart-cat-chip:active { transform:scale(.97); }
 
         .ledger-entry-main { display:flex; align-items:center; width:100%; gap:10px; }
         .ledger-entry-info { flex:1; min-width:0; }
@@ -639,8 +652,12 @@ th:first-child, td:first-child {
                 <input type="number" id="tAmt" placeholder="금액" style="flex:1; font-weight:bold;">
             </div>
             <div class="autocomplete-wrap">
-                <input type="text" id="tDesc" placeholder="내용 (예: 홍길동 1~6월 회비)" autocomplete="off" oninput="onDescInput()" onkeydown="onDescKeydown(event)">
+                <input type="text" id="tDesc" placeholder="내용 (예: 홍길동 1~6월 회비)" autocomplete="off" onfocus="showRecentLedgerHistory()" oninput="onDescInput()" onkeydown="onDescKeydown(event)">
                 <div class="autocomplete-list" id="acList"></div>
+            </div>
+            <div class="smart-cat-recommend" id="smartCatRecommend">
+                <div class="smart-cat-title">💡 과거 장부 기준 추천 항목</div>
+                <div class="smart-cat-chips" id="smartCatChips"></div>
             </div>
             <!-- ✅ 빠른 월 선택 버튼 (월회비 입력 시 표시) -->
             <div id="quickMonthArea" style="display:none; margin-bottom:6px;">
@@ -1900,6 +1917,7 @@ window.saveAndExit = () => {
         // ✅ 카테고리 변경 시 빠른 월 영역 초기화
         resetSelectedDuesMonths();
         document.getElementById('acList').classList.remove('show');
+        if (typeof hideSmartCategoryRecommendations === 'function') hideSmartCategoryRecommendations();
         // ✅ tCat 변경 시 빠른 월 영역 재갱신
         el.onchange = () => {
             const desc = document.getElementById('tDesc').value.trim();
@@ -2541,10 +2559,10 @@ function checkRoleMatch(memberRole, groupKey) {
             .slice(0, 8);
     }
 
-    // 2026-09-23 1단계: 세부내용을 먼저 입력하면 과거 장부에서 수입/지출·카테고리를 추정해 자동 선택
-    function inferLedgerTypeCategory(keyword) {
+    // 2026-09-23 1~2단계: 세부내용 기반 자동선택 + 애매할 때 추천 후보 표시
+    function getLedgerCategoryCandidates(keyword) {
         const q = normalizeLedgerKeyword(keyword);
-        if (!q) return null;
+        if (!q) return [];
         const rows = Array.isArray(window.trans) ? window.trans : [];
         const groups = new Map();
 
@@ -2571,11 +2589,14 @@ function checkRoleMatch(memberRole, groupKey) {
             groups.set(key, g);
         });
 
-        const ranked = Array.from(groups.values()).sort((a,b) =>
+        return Array.from(groups.values()).sort((a,b) =>
             (b.weighted-a.weighted) || (b.count-a.count) || (b.recency-a.recency) || (a.firstIdx-b.firstIdx)
         );
-        if (!ranked.length) return null;
+    }
 
+    function inferLedgerTypeCategory(keyword) {
+        const ranked = getLedgerCategoryCandidates(keyword);
+        if (!ranked.length) return null;
         const top = ranked[0];
         const second = ranked[1];
         // 한 종류로만 사용됐거나, 과거 사용 패턴이 충분히 우세할 때만 자동 선택한다.
@@ -2583,6 +2604,62 @@ function checkRoleMatch(memberRole, groupKey) {
         if (!clear) return null;
         return top;
     }
+
+    function hideSmartCategoryRecommendations() {
+        const box = document.getElementById('smartCatRecommend');
+        const chips = document.getElementById('smartCatChips');
+        if (box) box.classList.remove('show');
+        if (chips) chips.innerHTML = '';
+    }
+
+    function renderSmartCategoryRecommendations(keyword) {
+        const box = document.getElementById('smartCatRecommend');
+        const chips = document.getElementById('smartCatChips');
+        if (!box || !chips) return;
+        const q = String(keyword || '').trim();
+        if (!q) return hideSmartCategoryRecommendations();
+
+        const typeEl = document.getElementById('tType');
+        const catEl = document.getElementById('tCat');
+        // 회비/가입비에서 회원명을 찾는 중에는 기존 회원 자동완성을 우선한다.
+        if (typeEl && catEl && typeEl.value === 'income' && ['월회비','가입비'].includes(catEl.value)) {
+            const memberHit = window.members.some(m => !EXCLUDED_STATUSES.includes(m.status) && m.name && m.name.includes(q));
+            if (memberHit) return hideSmartCategoryRecommendations();
+        }
+
+        const ranked = getLedgerCategoryCandidates(q);
+        if (ranked.length < 2) return hideSmartCategoryRecommendations();
+        const top = ranked[0], second = ranked[1];
+        const clear = top.weighted >= second.weighted * 2 || top.count >= second.count + 2;
+        if (clear) return hideSmartCategoryRecommendations();
+
+        const items = ranked.slice(0,3);
+        chips.innerHTML = items.map((x, i) => {
+            const typeLabel = x.type === 'income' ? '수입' : '지출';
+            const cls = x.type === 'income' ? 'income' : 'expense';
+            return `<button type="button" class="smart-cat-chip ${cls}" data-type="${escapeHtmlText(x.type)}" data-cat="${escapeHtmlText(x.cat)}" onclick="selectSmartCategoryRecommendation(this)">${i===0?'추천 ':''}${typeLabel} · ${escapeHtmlText(x.cat)}<small>${x.count}회</small></button>`;
+        }).join('');
+        box.classList.add('show');
+    }
+
+    window.selectSmartCategoryRecommendation = (btn) => {
+        const type = btn.dataset.type || '';
+        const cat = btn.dataset.cat || '';
+        const typeEl = document.getElementById('tType');
+        const catEl = document.getElementById('tCat');
+        if (!typeEl || !catEl || !CATS[type] || !CATS[type].includes(cat)) return;
+        if (typeEl.value !== type) {
+            typeEl.value = type;
+            setCategories();
+        }
+        if (Array.from(catEl.options).some(op => op.value === cat)) catEl.value = cat;
+        catEl.dataset.autoSuggested = '1';
+        catEl.style.boxShadow = '0 0 0 3px rgba(9,132,227,.13)';
+        setTimeout(() => { if (catEl.dataset.autoSuggested === '1') catEl.style.boxShadow = ''; }, 700);
+        hideSmartCategoryRecommendations();
+        // 추천을 고른 뒤 해당 수입/지출 기준으로 과거 장부 자동완성 목록도 다시 갱신
+        window.onDescInput();
+    };
 
     function applySmartLedgerCategory(keyword) {
         const typeEl = document.getElementById('tType');
@@ -2596,7 +2673,11 @@ function checkRoleMatch(memberRole, groupKey) {
         }
 
         const guess = inferLedgerTypeCategory(keyword);
-        if (!guess) return null;
+        if (!guess) {
+            renderSmartCategoryRecommendations(keyword);
+            return null;
+        }
+        hideSmartCategoryRecommendations();
 
         if (typeEl.value !== guess.type) {
             typeEl.value = guess.type;
@@ -2610,6 +2691,76 @@ function checkRoleMatch(memberRole, groupKey) {
         }
         return guess;
     }
+
+    // 2026-09-23 3단계: 내용 입력창을 누르면 현재 수입/지출의 최근 사용 항목 5개 표시
+    function buildRecentLedgerHistorySuggestions(type) {
+        const rows = Array.isArray(window.trans) ? window.trans : [];
+        const sorted = rows
+            .filter(t => t && t.type === type && String(t.desc || '').trim())
+            .slice()
+            .sort((a,b) => {
+                const ad = Number(String(a.date || '').replace(/-/g,'')) || 0;
+                const bd = Number(String(b.date || '').replace(/-/g,'')) || 0;
+                if (bd !== ad) return bd - ad;
+                return Number(b.id || 0) - Number(a.id || 0);
+            });
+
+        const seen = new Set();
+        const result = [];
+        for (const t of sorted) {
+            const desc = String(t.desc || '').trim();
+            const amt = Number(t.amt || 0);
+            const cat = String(t.cat || '');
+            const key = `${normalizeLedgerKeyword(desc)}|${amt}|${cat}`;
+            if (!desc || seen.has(key)) continue;
+            seen.add(key);
+            result.push({ desc, amt, cat, type, date:t.date || '', count:1 });
+            if (result.length >= 5) break;
+        }
+        return result;
+    }
+
+    function ledgerHistoryItemHtml(s, type) {
+        const kindLabel = type === 'income' ? '수입' : '지출';
+        const cls = type === 'expense' ? ' autocomplete-history-expense' : '';
+        return `<div class="autocomplete-item${cls}" data-history="1"
+                    data-desc="${escapeHtmlText(s.desc)}" data-amt="${s.amt}" data-cat="${escapeHtmlText(s.cat)}"
+                    onmousedown="selectLedgerHistoryItem(this)">
+            <div style="display:flex; flex-direction:column; gap:2px; flex:1; min-width:0;">
+                <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+                    <span class="ac-name" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtmlText(s.desc)}</span>
+                    <span class="autocomplete-history-amount">${Number(s.amt||0).toLocaleString()}원</span>
+                </div>
+                <div class="autocomplete-history-meta">
+                    <span class="autocomplete-history-badge">${kindLabel}</span>
+                    <span class="autocomplete-history-badge">${escapeHtmlText(s.cat || '항목없음')}</span>
+                    ${s.date ? `<span>최근 ${escapeHtmlText(s.date)}</span>` : ''}
+                    ${s.count > 1 ? `<span>${s.count}회 사용</span>` : ''}
+                </div>
+            </div>
+        </div>`;
+    }
+
+    window.showRecentLedgerHistory = () => {
+        const descEl = document.getElementById('tDesc');
+        const list = document.getElementById('acList');
+        if (!descEl || !list || String(descEl.value || '').trim()) return;
+        const type = document.getElementById('tType').value;
+        const cat = document.getElementById('tCat').value;
+
+        // 회비/가입비는 이름 입력 자동완성을 우선하므로 빈칸에서 최근 장부를 띄우지 않는다.
+        if (type === 'income' && ['월회비','가입비'].includes(cat)) {
+            list.classList.remove('show');
+            return;
+        }
+
+        const suggestions = buildRecentLedgerHistorySuggestions(type);
+        if (!suggestions.length) { list.classList.remove('show'); return; }
+        acSelectedIdx = -1;
+        list.innerHTML = `<div class="autocomplete-recent-title">🕘 <b>최근 사용 ${suggestions.length}개</b> · 누르면 내용·항목·금액 자동입력</div>` +
+            suggestions.map(s => ledgerHistoryItemHtml(s, type)).join('');
+        list.classList.add('show');
+    };
 
     window.onDescInput = () => {
         const val = document.getElementById('tDesc').value;
@@ -2656,26 +2807,7 @@ function checkRoleMatch(memberRole, groupKey) {
         const suggestions = buildLedgerHistorySuggestions(val, type);
         if (!val.trim() || suggestions.length === 0) { list.classList.remove('show'); return; }
 
-        list.innerHTML = suggestions.map((s) => {
-            const kindLabel = type === 'income' ? '수입' : '지출';
-            const cls = type === 'expense' ? ' autocomplete-history-expense' : '';
-            return `<div class="autocomplete-item${cls}" data-history="1"
-                        data-desc="${escapeHtmlText(s.desc)}" data-amt="${s.amt}" data-cat="${escapeHtmlText(s.cat)}"
-                        onmousedown="selectLedgerHistoryItem(this)">
-                <div style="display:flex; flex-direction:column; gap:2px; flex:1; min-width:0;">
-                    <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
-                        <span class="ac-name" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtmlText(s.desc)}</span>
-                        <span class="autocomplete-history-amount">${s.amt.toLocaleString()}원</span>
-                    </div>
-                    <div class="autocomplete-history-meta">
-                        <span class="autocomplete-history-badge">${kindLabel}</span>
-                        <span class="autocomplete-history-badge">${escapeHtmlText(s.cat || '항목없음')}</span>
-                        ${s.date ? `<span>최근 ${escapeHtmlText(s.date)}</span>` : ''}
-                        ${s.count > 1 ? `<span>${s.count}회 사용</span>` : ''}
-                    </div>
-                </div>
-            </div>`;
-        }).join('');
+        list.innerHTML = suggestions.map((s) => ledgerHistoryItemHtml(s, type)).join('');
         list.classList.add('show');
     };
 
