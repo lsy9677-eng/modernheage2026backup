@@ -622,6 +622,7 @@ th:first-child, td:first-child {
         <div class="section-header">
             <div class="section-title"><span>📝 수입/지출 관리</span></div>
             <div style="display:flex; gap:5px;">
+                <button class="btn-sub admin-only" style="background:#e8fff8; color:#007f63; border:1px solid #a7ead8;" onclick="openRestorePointManager()">⏱ 자동복구점</button>
                 <button class="btn-sub" style="background:#fff; color:var(--primary); border:1px solid var(--primary);" onclick="goTab('report')">📊 결산및 감사보고</button>
             </div>
         </div>
@@ -1183,6 +1184,22 @@ th:first-child, td:first-child {
         </div>
     </div>
 
+
+<!-- 자동 복구점 관리 -->
+<div id="restorePointModal" class="modal-wrap" style="display:none; z-index:2500;">
+  <div class="modal" style="max-width:520px;">
+    <button class="modal-close-x" onclick="closeRestorePointManager()">×</button>
+    <h3 style="margin-top:0;">⏱ 자동 복구점</h3>
+    <div style="font-size:.82rem; color:#636e72; line-height:1.55; margin-bottom:12px;">
+      장부·회원·일정·설정 상태를 자동 저장합니다. 영수증 사진은 중복 저장하지 않고 안전미러/이력에서 복원해 용량을 줄입니다.<br>
+      최근 <b>20개</b> 복구점만 자동 보관하며 오래된 항목은 자동 정리됩니다.
+    </div>
+    <button class="btn-main" style="margin-bottom:12px; background:linear-gradient(135deg,#00b894,#00cec9);" onclick="createManualRestorePoint()">＋ 지금 복구점 저장</button>
+    <div id="restorePointStatus" style="font-size:.78rem; color:#636e72; margin-bottom:10px;"></div>
+    <div id="restorePointList" style="max-height:52vh; overflow:auto;"></div>
+  </div>
+</div>
+
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, set, get, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
@@ -1430,6 +1447,218 @@ function safetyStamp() {
     return `${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
 }
 
+
+// ===================== 자동 복구점 (2026-09-23) =====================
+const RESTORE_ROOT = `${SAFETY_ROOT}/restorePoints`;
+const RESTORE_LIMIT = 20;
+const AUTO_RESTORE_MIN_INTERVAL = 2 * 60 * 1000; // 잦은 입력 시 2분 단위로 묶음
+let lastAutoRestoreAt = 0;
+let restorePointBusy = false;
+
+function makeReceiptRef(x) {
+    if(!x || x.id == null) return null;
+    return {
+        id: x.id,
+        date: x.date || '',
+        desc: x.desc || '',
+        linkedTransId: x.linkedTransId ?? x.transId ?? null
+    };
+}
+
+function buildRestorePointPayload(reason='자동 저장') {
+    const transItems = {};
+    (window.trans || []).forEach(x => { if(x && x.id != null) transItems[String(x.id)] = x; });
+    const receiptRefs = {};
+    (window.receipts || []).forEach(x => {
+        const r = makeReceiptRef(x);
+        if(r) receiptRefs[String(r.id)] = r;
+    });
+    return {
+        createdAt: Date.now(),
+        createdAtText: getKoreaTimestampISO(),
+        reason,
+        transCount: Object.keys(transItems).length,
+        receiptCount: Object.keys(receiptRefs).length,
+        memberCount: (window.members || []).length,
+        transItems,
+        receiptRefs,
+        members_acc: window.members || [],
+        events: window.events || [],
+        settings: window.settings || {},
+        auditState: window.auditState || null
+    };
+}
+
+async function pruneRestorePoints() {
+    try {
+        const snap = await get(ref(db, RESTORE_ROOT));
+        const obj = snap.val() || {};
+        const rows = Object.entries(obj).map(([id,v]) => ({id, createdAt:Number(v?.createdAt||id.split('_')[0]||0)}))
+            .sort((a,b) => b.createdAt-a.createdAt);
+        if(rows.length <= RESTORE_LIMIT) return;
+        const updates = {};
+        rows.slice(RESTORE_LIMIT).forEach(r => updates[`${RESTORE_ROOT}/${r.id}`] = null);
+        if(Object.keys(updates).length) await update(ref(db), updates);
+    } catch(e) { console.warn('오래된 복구점 정리 실패:', e); }
+}
+
+async function createRestorePoint(reason='자동 저장', force=false) {
+    if(!window.isAdmin || restorePointBusy) return false;
+    const now = Date.now();
+    if(!force && now-lastAutoRestoreAt < AUTO_RESTORE_MIN_INTERVAL) return false;
+    restorePointBusy = true;
+    try {
+        const payload = buildRestorePointPayload(reason);
+        const id = `${payload.createdAt}_${Math.random().toString(36).slice(2,7)}`;
+        await set(ref(db, `${RESTORE_ROOT}/${id}`), payload);
+        lastAutoRestoreAt = now;
+        localStorage.setItem('modernAccountLastRestorePointAt', String(now));
+        pruneRestorePoints();
+        return true;
+    } catch(e) {
+        console.warn('자동 복구점 저장 실패:', e);
+        return false;
+    } finally {
+        restorePointBusy = false;
+    }
+}
+
+function scheduleAutoRestorePoint(reason='자동 저장') {
+    // 본 저장이 성공한 뒤 UI를 막지 않고 복구점을 남김
+    setTimeout(() => createRestorePoint(reason, false), 80);
+}
+
+async function recoverReceiptForPoint(id, pointTime) {
+    const sid = String(id);
+    // 수정/삭제 이후라면, 복구점 직후 처음 생성된 archive가 당시 상태와 가장 가깝다.
+    try {
+        const arcSnap = await get(ref(db, `${SAFETY_ROOT}/archive/receiptItems/${sid}`));
+        const arcs = arcSnap.val() || {};
+        const after = Object.entries(arcs)
+            .map(([k,v]) => ({k,v,t:Number(String(k).split('_')[0]||0)}))
+            .filter(x => x.t >= Number(pointTime||0) && x.v && x.v.img)
+            .sort((a,b)=>a.t-b.t);
+        if(after.length) return after[0].v;
+    } catch(e) { console.warn('영수증 archive 확인 실패', sid, e); }
+    const main = await safeGet(`${CLUB_ROOT}/receiptItems/${sid}`);
+    if(main && main.img) return main;
+    const mirror = await safeGet(`${SAFETY_ROOT}/liveMirror/receiptItems/${sid}`);
+    if(mirror && mirror.img) return mirror;
+    return null;
+}
+
+window.openRestorePointManager = async () => {
+    if(!window.isAdmin) return alert('관리자 로그인이 필요합니다.');
+    document.getElementById('restorePointModal').style.display='flex';
+    await renderRestorePointList();
+};
+window.closeRestorePointManager = () => { document.getElementById('restorePointModal').style.display='none'; };
+
+window.createManualRestorePoint = async () => {
+    if(!window.isAdmin) return alert('관리자 로그인이 필요합니다.');
+    const status=document.getElementById('restorePointStatus');
+    if(status) status.textContent='복구점 저장 중...';
+    const ok=await createRestorePoint('수동 복구점', true);
+    if(status) status.textContent=ok?'✅ 복구점 저장 완료':'⚠️ 복구점 저장 실패';
+    await renderRestorePointList();
+};
+
+async function renderRestorePointList() {
+    const box=document.getElementById('restorePointList');
+    const status=document.getElementById('restorePointStatus');
+    if(!box) return;
+    box.innerHTML='<div style="padding:15px;text-align:center;color:#999;">불러오는 중...</div>' ;
+    try {
+        const snap=await get(ref(db, RESTORE_ROOT));
+        const obj=snap.val()||{};
+        const rows=Object.entries(obj).map(([id,v])=>({id,...v})).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
+        if(status) status.textContent=`현재 ${rows.length}개 / 최대 ${RESTORE_LIMIT}개 자동 보관`;
+        if(!rows.length){ box.innerHTML='<div style="padding:18px;text-align:center;color:#999;">저장된 복구점이 없습니다.</div>'; return; }
+        box.innerHTML=rows.map((r,i)=>`
+          <div style="border:1px solid #e8ecef;border-radius:13px;padding:11px 12px;margin-bottom:8px;background:#fff;">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+              <div style="min-width:0;">
+                <div style="font-weight:800;font-size:.9rem;">${i===0?'🟢 ':''}${escapeHtml(String(r.createdAtText||''))}</div>
+                <div style="font-size:.72rem;color:#636e72;margin-top:3px;">${escapeHtml(String(r.reason||'자동 저장'))} · 장부 ${Number(r.transCount||0)}건 · 영수증 ${Number(r.receiptCount||0)}건 · 회원 ${Number(r.memberCount||0)}명</div>
+              </div>
+              <button class="btn-sub" style="background:#2d3436;color:#fff;border:none;flex-shrink:0;" onclick="restoreFromPoint('${r.id}')">복원</button>
+            </div>
+          </div>`).join('');
+    } catch(e) {
+        box.innerHTML=`<div style="padding:15px;color:#d63031;">복구점 조회 실패: ${escapeHtml(e.message||String(e))}</div>`;
+    }
+}
+
+window.restoreFromPoint = async (pointId) => {
+    if(!window.isAdmin) return alert('관리자 로그인이 필요합니다.');
+    if(!confirm('선택한 시점으로 장부·회비·회원·일정·설정을 되돌립니다.\n현재 상태는 복원 직전 긴급 복구점으로 먼저 저장합니다. 계속하시겠습니까?')) return;
+    document.getElementById('loadingMsg').innerText='복원 준비 중...';
+    document.getElementById('loadingOverlay').style.display='flex';
+    try {
+        const point=await safeGet(`${RESTORE_ROOT}/${pointId}`);
+        if(!point) throw new Error('선택한 복구점을 찾을 수 없습니다.');
+        await createRestorePoint('복원 직전 긴급 복구점', true);
+
+        const desiredReceipts={};
+        const missing=[];
+        for(const id of Object.keys(point.receiptRefs||{})) {
+            document.getElementById('loadingMsg').innerText=`영수증 복원 확인 ${Object.keys(desiredReceipts).length+1}/${Object.keys(point.receiptRefs||{}).length}`;
+            const full=await recoverReceiptForPoint(id, point.createdAt);
+            if(full) desiredReceipts[id]=full; else missing.push(id);
+        }
+        if(missing.length) throw new Error(`영수증 원본 ${missing.length}건을 안전미러/이력에서 찾지 못했습니다. 복원을 중단했습니다.`);
+
+        const curMain=(await safeGet(`${CLUB_ROOT}/transItems`))||{};
+        const curMirror=(await safeGet(`${SAFETY_ROOT}/liveMirror/transItems`))||{};
+        const curReceiptMain=(await safeGet(`${CLUB_ROOT}/receiptItems`))||{};
+        const curReceiptMirror=(await safeGet(`${SAFETY_ROOT}/liveMirror/receiptItems`))||{};
+        const updates={};
+        const desiredTrans=point.transItems||{};
+
+        // 현재에는 있지만 과거 복구점에는 없던 항목은 삭제표시
+        new Set([...Object.keys(curMain),...Object.keys(curMirror)]).forEach(id=>{
+            if(!desiredTrans[id]) {
+                updates[`${CLUB_ROOT}/transItems/${id}`]=null;
+                updates[`${SAFETY_ROOT}/liveMirror/transItems/${id}`]=null;
+                updates[`${CLUB_ROOT}/deletedTrans/${id}`]=true;
+            }
+        });
+        Object.entries(desiredTrans).forEach(([id,x])=>{
+            updates[`${CLUB_ROOT}/transItems/${id}`]=x;
+            updates[`${SAFETY_ROOT}/liveMirror/transItems/${id}`]=x;
+            updates[`${CLUB_ROOT}/deletedTrans/${id}`]=null;
+        });
+
+        new Set([...Object.keys(curReceiptMain),...Object.keys(curReceiptMirror)]).forEach(id=>{
+            if(!desiredReceipts[id]) {
+                updates[`${CLUB_ROOT}/receiptItems/${id}`]=null;
+                updates[`${SAFETY_ROOT}/liveMirror/receiptItems/${id}`]=null;
+                updates[`${CLUB_ROOT}/deletedReceipts/${id}`]=true;
+            }
+        });
+        Object.entries(desiredReceipts).forEach(([id,x])=>{
+            updates[`${CLUB_ROOT}/receiptItems/${id}`]=x;
+            updates[`${SAFETY_ROOT}/liveMirror/receiptItems/${id}`]=x;
+            updates[`${CLUB_ROOT}/deletedReceipts/${id}`]=null;
+        });
+
+        updates[`${CLUB_ROOT}/members_acc`]=point.members_acc||[];
+        updates[`${CLUB_ROOT}/events`]=point.events||[];
+        updates[`${CLUB_ROOT}/settings`]=point.settings||{};
+        if(point.auditState) updates[`${CLUB_ROOT}/auditState`]=point.auditState;
+        updates[`${SAFETY_ROOT}/meta/lastRestore`]={at:getKoreaTimestampISO(), pointId, sourceAt:point.createdAtText||''};
+        await update(ref(db), updates);
+        alert('✅ 복원이 완료되었습니다. 화면을 다시 불러옵니다.');
+        location.reload();
+    } catch(e) {
+        console.error(e);
+        alert('복원 실패: '+e.message);
+    } finally {
+        document.getElementById('loadingOverlay').style.display='none';
+    }
+};
+// ==================================================================
+
 async function persistTransItem(item) {
     cacheCurrentData();
     const id = String(item.id);
@@ -1446,6 +1675,7 @@ async function persistTransItem(item) {
     await update(ref(db), updates);
     const [mainCheck, mirrorCheck] = await Promise.all([get(ref(db, mainPath)), get(ref(db, mirrorPath))]);
     if(!mainCheck.exists() || !mirrorCheck.exists()) throw new Error('장부 이중 서버 저장 확인 실패');
+    scheduleAutoRestorePoint(old ? '장부 수정 후' : '장부 입력 후');
 }
 
 async function deleteTransItem(id) {
@@ -1461,6 +1691,7 @@ async function deleteTransItem(id) {
     updates[`${SAFETY_ROOT}/meta/lastWrite`] = { at:getKoreaTimestampISO(), type:'trans', id:id, action:'delete' };
     if(old) updates[`${SAFETY_ROOT}/archive/transItems/${id}/${stamp}`] = old;
     await update(ref(db), updates);
+    scheduleAutoRestorePoint('장부 삭제 후');
 }
 
 async function persistReceiptItem(item) {
@@ -1481,6 +1712,7 @@ async function persistReceiptItem(item) {
     if(!mainCheck.exists() || !mainCheck.val().img || !mirrorCheck.exists() || !mirrorCheck.val().img) {
         throw new Error('영수증 이중 서버 저장 확인 실패');
     }
+    scheduleAutoRestorePoint(old ? '영수증 수정 후' : '영수증 등록 후');
 }
 
 async function deleteReceiptItem(id) {
@@ -1496,6 +1728,7 @@ async function deleteReceiptItem(id) {
     updates[`${SAFETY_ROOT}/meta/lastWrite`] = { at:getKoreaTimestampISO(), type:'receipt', id:id, action:'delete' };
     if(old) updates[`${SAFETY_ROOT}/archive/receiptItems/${id}/${stamp}`] = old;
     await update(ref(db), updates);
+    scheduleAutoRestorePoint('영수증 삭제 후');
 }
 
 window.createSafetyBaseline = async () => {
@@ -1537,7 +1770,9 @@ function saveToFirebase() {
     updates[CLUB_ROOT + '/events'] = window.events;
     updates[CLUB_ROOT + '/settings'] = window.settings;
     if(window.auditState) updates[CLUB_ROOT + '/auditState'] = window.auditState;
-    return update(ref(db), updates);
+    return update(ref(db), updates).then(() => {
+        scheduleAutoRestorePoint('회원·일정·설정 변경 후');
+    });
 }
 
 window.saveAndExit = () => {
@@ -1599,6 +1834,9 @@ window.saveAndExit = () => {
             window.isAdmin = true;
             // 여기서 UID 체크를 한 번 더 해도 좋지만, DB 규칙이 이미 막고 있음
             console.log("관리자 접속:", user.email);
+            const prevAuto = Number(localStorage.getItem('modernAccountLastRestorePointAt') || 0);
+            lastAutoRestoreAt = prevAuto;
+            setTimeout(() => createRestorePoint('관리자 접속 자동 복구점', false), 1200);
         } else {
             // 로그아웃 시
             window.isAdmin = false;
@@ -4205,6 +4443,7 @@ window.uploadReceipt = async () => {
     window.saveTransEdit = async () => { 
         const id = Number(document.getElementById('editTransId').value); const t = window.trans.find(x => x.id === id); 
         if(t) {
+            await createRestorePoint('장부 수정 전', true);
             t.date = document.getElementById('editTransDate').value;
             t.type = document.getElementById('editTransType').value;
             t.cat = document.getElementById('editTransCat').value;
@@ -4221,11 +4460,12 @@ window.uploadReceipt = async () => {
             closeTransModal();
         }
     }
-    window.delTransFromModal = async () => { if(confirm('삭제하시겠습니까?')){ const id = Number(document.getElementById('editTransId').value); window.trans = window.trans.filter(x => x.id !== id); try { await deleteTransItem(id); } catch(e) { return alert('삭제 저장 실패: ' + e.message); } renderAll(); closeTransModal(); } }
+    window.delTransFromModal = async () => { if(confirm('삭제하시겠습니까?')){ const id = Number(document.getElementById('editTransId').value); await createRestorePoint('장부 삭제 전', true); window.trans = window.trans.filter(x => x.id !== id); try { await deleteTransItem(id); } catch(e) { return alert('삭제 저장 실패: ' + e.message); } renderAll(); closeTransModal(); } }
 // 리스트에서 쓰레기통 아이콘 클릭 시 즉시 삭제하는 함수 (추가 위치)
-    window.deleteTransDirect = (id) => {
+    window.deleteTransDirect = async (id) => {
         if(!window.isAdmin) return alert('관리자 로그인이 필요합니다.');
         if(confirm('이 내역을 정말 삭제하시겠습니까?')) {
+            await createRestorePoint('장부 삭제 전', true);
             // 선택한 ID만 제외하고 데이터 배열을 다시 만듭니다
             window.trans = window.trans.filter(x => x.id !== id);
             

@@ -1,0 +1,56 @@
+{
+  "rules": {
+    ".read": true,
+    ".write": false,
+
+    "clubData": {
+      "trans": { ".write": false },
+      "receipts": { ".write": false },
+      "members": { ".write": false },
+
+      "transItems": {
+        "$id": { ".write": "auth != null" }
+      },
+      "receiptItems": {
+        "$id": { ".write": "auth != null" }
+      },
+      "deletedTrans": {
+        "$id": { ".write": "auth != null" }
+      },
+      "deletedReceipts": {
+        "$id": { ".write": "auth != null" }
+      },
+      "members_acc": { ".write": "auth != null" },
+      "events": { ".write": "auth != null" },
+      "settings": { ".write": "auth != null" },
+      "auditState": { ".write": "auth != null" }
+    },
+
+    "accountingSafety": {
+      "liveMirror": {
+        "transItems": {
+          "$id": { ".write": "auth != null" }
+        },
+        "receiptItems": {
+          "$id": { ".write": "auth != null" }
+        }
+      },
+      "archive": {
+        "transItems": {
+          "$id": {
+            "$version": { ".write": "auth != null" }
+          }
+        },
+        "receiptItems": {
+          "$id": {
+            "$version": { ".write": "auth != null" }
+          }
+        }
+      },
+      "restorePoints": {
+        "$pointId": { ".write": "auth != null" }
+      },
+      "meta": { ".write": "auth != null" }
+    }
+  }
+}
