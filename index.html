@@ -129,6 +129,21 @@
         .filter-chip.group-btn { background: #e3f2fd; color: var(--income); } 
 
         .ledger-summary-box { background: linear-gradient(to right, #f8f9fa, #fff); border-radius: 16px; padding: 18px; margin-bottom: 18px; border: 1px solid #eee; font-size: 0.95rem; box-shadow: 0 2px 10px rgba(0,0,0,0.03); }
+
+        /* 2026-09-23 13단계: 이번 달 회계 요약 카드 */
+        .monthly-overview-wrap { margin: 0 0 14px; }
+        .monthly-overview-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 2px 7px; }
+        .monthly-overview-title { font-size:.82rem; font-weight:800; color:#495057; }
+        .monthly-overview-period { font-size:.72rem; color:#868e96; }
+        .monthly-overview-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px; }
+        .monthly-overview-card { background:#fff; border:1px solid #edf0f2; border-radius:12px; padding:10px 8px; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,.025); min-width:0; }
+        .monthly-overview-label { display:block; font-size:.69rem; color:#868e96; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .monthly-overview-value { display:block; font-size:.88rem; font-weight:900; color:#343a40; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .monthly-overview-card.income .monthly-overview-value { color:var(--income); }
+        .monthly-overview-card.expense .monthly-overview-value { color:var(--expense); }
+        .monthly-overview-card.donation .monthly-overview-value { color:var(--accent); }
+        .monthly-overview-card.receipt .monthly-overview-value { color:#a75b00; }
+        @media (max-width:560px){ .monthly-overview-grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
         .summary-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
         .summary-row.total { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #ced6e0; font-weight: 800; font-size: 1.05rem; }
         
@@ -649,6 +664,23 @@ th:first-child, td:first-child {
         .change-history-head { display:flex; justify-content:space-between; gap:8px; font-size:.8rem; font-weight:900; }
         .change-history-sub { margin-top:4px; color:#636e72; font-size:.72rem; line-height:1.4; word-break:break-word; }
 
+        /* 2026-09-23 Step11: backup/restore health status */
+        .backup-health-bar {
+            display:flex; align-items:center; justify-content:space-between; gap:10px;
+            margin:0 0 12px; padding:10px 12px; border-radius:13px;
+            border:1px solid #dfe6e9; background:#f8f9fa; cursor:pointer;
+            font-size:.78rem; line-height:1.35; box-shadow:0 2px 8px rgba(0,0,0,.03);
+        }
+        .backup-health-bar .bh-main { font-weight:800; color:#2d3436; }
+        .backup-health-bar .bh-sub { color:#636e72; font-size:.70rem; margin-top:2px; }
+        .backup-health-bar.good { background:#ecfff8; border-color:#a7ead8; }
+        .backup-health-bar.good .bh-main { color:#007f63; }
+        .backup-health-bar.warn { background:#fff8e8; border-color:#ffd59a; }
+        .backup-health-bar.warn .bh-main { color:#9a5a00; }
+        .backup-health-bar.bad { background:#fff0f0; border-color:#ffb8b8; }
+        .backup-health-bar.bad .bh-main { color:#c0392b; }
+        .backup-health-bar .bh-open { flex-shrink:0; font-weight:800; color:#636e72; }
+
 </style>
 </head>
 <body>
@@ -701,6 +733,26 @@ th:first-child, td:first-child {
                 <button class="btn-sub admin-only" style="background:#fff7e6; color:#a75b00; border:1px solid #ffd59a;" onclick="openMonthEndCheck()">✅ 월말점검</button>
                 <button class="btn-sub admin-only" style="background:#f4efff; color:#6c5ce7; border:1px solid #d8ccff;" onclick="openChangeHistory()">🕘 변경이력</button>
                 <button class="btn-sub" style="background:#fff; color:var(--primary); border:1px solid var(--primary);" onclick="goTab('report')">📊 결산및 감사보고</button>
+            </div>
+        </div>
+        <div id="backupHealthBar" class="backup-health-bar admin-only warn" onclick="openRestorePointManager()" title="자동 복구점 상태를 확인합니다.">
+            <div>
+                <div class="bh-main" id="backupHealthMain">🛡 보호상태 확인 중...</div>
+                <div class="bh-sub" id="backupHealthSub">최근 자동 복구점 정보를 불러오는 중입니다.</div>
+            </div>
+            <div class="bh-open">복구점 ›</div>
+        </div>
+
+        <div class="monthly-overview-wrap" id="monthlyOverviewWrap">
+            <div class="monthly-overview-head">
+                <div class="monthly-overview-title">📌 이번 달 한눈에 보기</div>
+                <div class="monthly-overview-period" id="monthlyOverviewPeriod"></div>
+            </div>
+            <div class="monthly-overview-grid">
+                <div class="monthly-overview-card income"><span class="monthly-overview-label">수입</span><span class="monthly-overview-value" id="monthlyOverviewIncome">0원</span></div>
+                <div class="monthly-overview-card expense"><span class="monthly-overview-label">지출</span><span class="monthly-overview-value" id="monthlyOverviewExpense">0원</span></div>
+                <div class="monthly-overview-card donation"><span class="monthly-overview-label">찬조금</span><span class="monthly-overview-value" id="monthlyOverviewDonation">0원</span></div>
+                <div class="monthly-overview-card receipt"><span class="monthly-overview-label">영수증 미등록</span><span class="monthly-overview-value" id="monthlyOverviewMissing">0건</span></div>
             </div>
         </div>
 <div class="card admin-only">
@@ -989,6 +1041,10 @@ th:first-child, td:first-child {
     
     <div id="page-receipts" class="page">
         <div class="section-title" style="margin-bottom:15px;"><span>🧾 영수증 관리</span></div>
+
+        <div class="batch-receipt-toolbar admin-only">
+            <button class="btn-sub" style="background:#fff8e8; color:#a75b00; border-color:#ffd59a;" onclick="openBatchReceiptManager()">📚 미등록 영수증 연속등록</button>
+        </div>
         <div class="card admin-only">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
                 <label style="font-size:0.8rem; color:#666;">(집행일자)</label>
@@ -1233,6 +1289,38 @@ th:first-child, td:first-child {
             </div>
         </div>
     </div>
+
+<div class="modal-wrap" id="batchReceiptModal" style="z-index:2450;">
+    <div class="modal" style="max-width:460px;">
+        <button class="modal-close-x" onclick="closeBatchReceiptManager()">×</button>
+        <h3 style="margin-top:0;">📚 미등록 영수증 연속등록</h3>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+            <select id="batchReceiptMonth" onchange="reloadBatchReceiptQueue()" style="margin-bottom:0;flex:1;">
+                <option value="all">전체 미등록</option>
+                <option value="01">1월</option><option value="02">2월</option><option value="03">3월</option>
+                <option value="04">4월</option><option value="05">5월</option><option value="06">6월</option>
+                <option value="07">7월</option><option value="08">8월</option><option value="09">9월</option>
+                <option value="10">10월</option><option value="11">11월</option><option value="12">12월</option>
+            </select>
+            <button class="btn-sub" onclick="reloadBatchReceiptQueue()">새로고침</button>
+        </div>
+        <div id="batchReceiptProgress" class="batch-receipt-progress">미등록 지출을 불러오는 중...</div>
+        <div id="batchReceiptTransInfo" class="batch-receipt-info"></div>
+        <input type="file" id="batchReceiptCamera" accept="image/*" capture="environment" style="display:none" onchange="handleBatchReceiptFile(this)">
+        <input type="file" id="batchReceiptGallery" accept="image/*" style="display:none" onchange="handleBatchReceiptFile(this)">
+        <div class="receipt-source-buttons">
+            <button type="button" class="receipt-source-btn" onclick="document.getElementById('batchReceiptCamera').click()">📷 바로 촬영</button>
+            <button type="button" class="receipt-source-btn" onclick="document.getElementById('batchReceiptGallery').click()">🖼️ 기존 사진 선택</button>
+        </div>
+        <div id="batchReceiptFileStatus" class="receipt-file-status">선택된 사진이 없습니다.</div>
+        <input type="text" id="batchReceiptDesc" placeholder="영수증 설명">
+        <div class="batch-receipt-actions">
+            <button class="btn-main" onclick="saveBatchReceiptAndNext()">저장 후 다음 ▶</button>
+            <button class="btn-main" style="background:#eee;color:#333;" onclick="skipBatchReceipt()">건너뛰기</button>
+        </div>
+        <div style="font-size:.72rem;color:#888;margin-top:10px;line-height:1.5;">마감된 월은 자동으로 제외합니다. 저장하면 다음 미등록 지출로 자동 이동합니다.</div>
+    </div>
+</div>
 <div class="modal-wrap" id="linkedReceiptModal">
         <div class="modal">
             <button class="modal-close-x" onclick="closeLinkedReceiptModal()">×</button>
@@ -1638,6 +1726,60 @@ const AUTO_RESTORE_MIN_INTERVAL = 2 * 60 * 1000; // 잦은 입력 시 2분 단�
 let lastAutoRestoreAt = 0;
 let restorePointBusy = false;
 
+let restoreHealthLastCheck = 0;
+let restoreHealthBusy = false;
+
+function formatRestoreHealthTime(v) {
+    if(!v) return '-';
+    try {
+        const d = new Date(Number(v));
+        const pad=n=>String(n).padStart(2,'0');
+        return `${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch(e) { return '-'; }
+}
+
+function applyRestoreHealthUI(status) {
+    const bar=document.getElementById('backupHealthBar');
+    const main=document.getElementById('backupHealthMain');
+    const sub=document.getElementById('backupHealthSub');
+    if(!bar || !main || !sub) return;
+    bar.classList.remove('good','warn','bad');
+    if(!status || !status.createdAt) {
+        bar.classList.add('warn');
+        main.textContent='🛡 자동 복구점 확인 필요';
+        sub.textContent='관리자 로그인 후 자동 복구점이 생성되면 상태가 표시됩니다.';
+        return;
+    }
+    const age=Date.now()-Number(status.createdAt||0);
+    const mins=Math.max(0,Math.round(age/60000));
+    const isFresh=age <= 24*60*60*1000;
+    bar.classList.add(isFresh?'good':'warn');
+    main.textContent=`${isFresh?'✅':'⚠️'} 최근 복구점 ${formatRestoreHealthTime(status.createdAt)}`;
+    const ageText=mins<60?`${mins}분 전`:mins<1440?`${Math.floor(mins/60)}시간 전`:`${Math.floor(mins/1440)}일 전`;
+    sub.textContent=`${ageText} · ${status.reason||'자동 저장'} · 장부 ${Number(status.transCount||0)}건 · 영수증 ${Number(status.receiptCount||0)}건`;
+}
+
+window.refreshRestoreHealth = async (force=false) => {
+    if(!window.isAdmin) return;
+    const now=Date.now();
+    if(restoreHealthBusy || (!force && now-restoreHealthLastCheck<15000)) return;
+    restoreHealthBusy=true;
+    restoreHealthLastCheck=now;
+    try {
+        const snap=await get(ref(db, `${SAFETY_ROOT}/meta/restoreStatus`));
+        applyRestoreHealthUI(snap.val()||null);
+    } catch(e) {
+        const bar=document.getElementById('backupHealthBar');
+        const main=document.getElementById('backupHealthMain');
+        const sub=document.getElementById('backupHealthSub');
+        if(bar&&main&&sub){
+            bar.classList.remove('good','warn'); bar.classList.add('bad');
+            main.textContent='❌ 복구점 상태 확인 실패';
+            sub.textContent=e.message||String(e);
+        }
+    } finally { restoreHealthBusy=false; }
+};
+
 function makeReceiptRef(x) {
     if(!x || x.id == null) return null;
     return {
@@ -1693,9 +1835,18 @@ async function createRestorePoint(reason='자동 저장', force=false) {
     try {
         const payload = buildRestorePointPayload(reason);
         const id = `${payload.createdAt}_${Math.random().toString(36).slice(2,7)}`;
-        await set(ref(db, `${RESTORE_ROOT}/${id}`), payload);
+        const restoreStatus = {
+            createdAt: payload.createdAt, createdAtText: payload.createdAtText, reason: payload.reason,
+            transCount: payload.transCount, receiptCount: payload.receiptCount, memberCount: payload.memberCount,
+            lastPointId: id
+        };
+        const restoreUpdates = {};
+        restoreUpdates[`${RESTORE_ROOT}/${id}`] = payload;
+        restoreUpdates[`${SAFETY_ROOT}/meta/restoreStatus`] = restoreStatus;
+        await update(ref(db), restoreUpdates);
         lastAutoRestoreAt = now;
         localStorage.setItem('modernAccountLastRestorePointAt', String(now));
+        applyRestoreHealthUI(restoreStatus);
         pruneRestorePoints();
         return true;
     } catch(e) {
@@ -1756,7 +1907,9 @@ async function renderRestorePointList() {
         const obj=snap.val()||{};
         const rows=Object.entries(obj).map(([id,v])=>({id,...v})).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
         if(status) status.textContent=`현재 ${rows.length}개 / 최대 ${RESTORE_LIMIT}개 자동 보관`;
-        if(!rows.length){ box.innerHTML='<div style="padding:18px;text-align:center;color:#999;">저장된 복구점이 없습니다.</div>'; return; }
+        if(!rows.length){ box.innerHTML='<div style="padding:18px;text-align:center;color:#999;">저장된 복구점이 없습니다.</div>'; applyRestoreHealthUI(null); return; }
+        const newest=rows[0];
+        applyRestoreHealthUI({createdAt:newest.createdAt, createdAtText:newest.createdAtText, reason:newest.reason, transCount:newest.transCount, receiptCount:newest.receiptCount, memberCount:newest.memberCount});
         box.innerHTML=rows.map((r,i)=>`
           <div style="border:1px solid #e8ecef;border-radius:13px;padding:11px 12px;margin-bottom:8px;background:#fff;">
             <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
@@ -2029,6 +2182,7 @@ window.saveAndExit = () => {
             window.isAdmin = false;
         }
         updateAdminUI(); // 화면 갱신
+        if(window.isAdmin) setTimeout(() => window.refreshRestoreHealth(true), 250);
     });
     
     window.changeAdminPassword = () => {
@@ -2411,6 +2565,78 @@ function confirmPossibleDuplicate(candidate) {
     return confirm(`⚠️ 비슷한 장부가 이미 있습니다.\n\n${lines}\n\n실제로 같은 금액이 다시 발생한 내역이면 [확인]을 눌러 그대로 저장하세요.\n중복 입력 같으면 [취소]를 눌러 기존 장부를 확인하세요.`);
 }
 
+
+
+// 2026-09-23 14단계: 이상 금액 자동 감지
+function medianAmount(values) {
+    const arr = values.map(v => Number(v || 0)).filter(v => v > 0).sort((a,b)=>a-b);
+    if (!arr.length) return 0;
+    const mid = Math.floor(arr.length / 2);
+    return arr.length % 2 ? arr[mid] : Math.round((arr[mid-1] + arr[mid]) / 2);
+}
+
+function findAmountAnomaly(candidate) {
+    const amt = Number(candidate.amt || 0);
+    if (!amt || amt <= 0) return null;
+
+    // 월회비/가입비/찬조금은 여러 달 합산·개별 금액 차이가 흔해 오탐 방지 차원에서 제외
+    if (candidate.type === 'income' && ['월회비','가입비','찬조금'].includes(String(candidate.cat || ''))) return null;
+
+    const rows = (Array.isArray(window.trans) ? window.trans : [])
+        .filter(t => t && String(t.type || '') === String(candidate.type || ''))
+        .filter(t => String(t.cat || '') === String(candidate.cat || ''))
+        .filter(t => Number(t.amt || 0) > 0)
+        .map(t => ({
+            ...t,
+            _score: candidate.desc ? duplicateTextScore(t.desc, candidate.desc) : 0
+        }));
+
+    if (!rows.length) return null;
+
+    // 내용이 비슷한 과거 기록이 3건 이상이면 그것을 우선 사용, 아니면 같은 항목 최근 기록 사용
+    const similar = rows.filter(t => t._score >= 0.5);
+    const pool = (similar.length >= 3 ? similar : rows)
+        .sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')) || Number(b.id||0)-Number(a.id||0))
+        .slice(0, 20);
+
+    if (pool.length < 3) return null;
+    const med = medianAmount(pool.map(t => t.amt));
+    if (!med) return null;
+
+    const ratio = amt / med;
+    const diff = Math.abs(amt - med);
+    // 단순 몇 천 원 차이는 경고하지 않음. 평소 금액의 2.5배 이상 또는 35% 이하일 때만 경고.
+    if (diff < 30000) return null;
+    if (ratio < 2.5 && ratio > 0.35) return null;
+
+    return {
+        median: med,
+        ratio,
+        sampleCount: pool.length,
+        min: Math.min(...pool.map(t => Number(t.amt||0))),
+        max: Math.max(...pool.map(t => Number(t.amt||0)))
+    };
+}
+
+function confirmAmountAnomaly(candidate) {
+    const info = findAmountAnomaly(candidate);
+    if (!info) return true;
+    const direction = Number(candidate.amt||0) > info.median ? '큰' : '작은';
+    const ratioText = info.ratio >= 1 ? `${info.ratio.toFixed(1)}배` : `${Math.round(info.ratio * 100)}%`;
+    return confirm(
+        `⚠️ 평소보다 금액이 많이 다릅니다.\n\n` +
+        `${candidate.type === 'income' ? '수입' : '지출'} / ${candidate.cat || '항목없음'}\n` +
+        `${candidate.desc || '(내용없음)'}\n\n` +
+        `입력 금액: ${Number(candidate.amt||0).toLocaleString()}원\n` +
+        `과거 ${info.sampleCount}건 중앙값: ${info.median.toLocaleString()}원\n` +
+        `과거 범위: ${info.min.toLocaleString()}원 ~ ${info.max.toLocaleString()}원\n` +
+        `평소보다 ${direction} 금액입니다 (${ratioText}).\n\n` +
+        `금액이 맞으면 [확인], 잘못 입력했다면 [취소]를 눌러 수정하세요.`
+    );
+}
+window.findAmountAnomaly = findAmountAnomaly;
+window.confirmAmountAnomaly = confirmAmountAnomaly;
+
 window.addTrans = async () => {
         if(!window.isAdmin) return alert('관리자만 입력 가능합니다.');
         const date = document.getElementById('tDate').value;
@@ -2422,6 +2648,7 @@ window.addTrans = async () => {
         if(!(await window.ensureAccountingMonthEditable(date, '장부 입력'))) return;
 
         if (!confirmPossibleDuplicate({ date, type, cat, amt, desc })) return;
+        if (!confirmAmountAnomaly({ date, type, cat, amt, desc })) return;
 
         const matchedMember = (type === 'income' && ['가입비','월회비','찬조금'].includes(cat))
             ? findMemberFromDesc(desc)
@@ -2587,6 +2814,8 @@ window.renderLedger = () => {
         }
         return b.id - a.id; 
     });
+
+    if(window.updateMonthlyOverviewCards) window.updateMonthlyOverviewCards();
 
     // 3. 요약 정보 계산 (수정 없음)
     let sumInc=0, sumExp=0; 
@@ -4533,6 +4762,165 @@ window.viewLinkedReceipt = (transId) => {
     document.getElementById('imgModal').style.display = 'flex';
     window.curReceiptId = r.id;
     updateAdminUI();
+};
+
+
+
+// 2026-09-23 13단계: 이번 달 회계 요약 카드
+window.updateMonthlyOverviewCards = function(){
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth()+1).padStart(2,'0');
+    const ym = `${y}-${m}`;
+    const rows = (window.trans || []).filter(t => String(t.date || '').startsWith(ym));
+    let inc = 0, exp = 0, don = 0, missing = 0;
+    rows.forEach(t => {
+        const amt = Number(t.amt || 0);
+        if(t.type === 'income') {
+            inc += amt;
+            if(String(t.cat || '').trim() === '찬조금') don += amt;
+        } else if(t.type === 'expense') {
+            exp += amt;
+            try { if(!window.getReceiptForTransaction || !window.getReceiptForTransaction(t.id)) missing++; } catch(e) { missing++; }
+        }
+    });
+    const setText = (id, text) => { const el=document.getElementById(id); if(el) el.textContent=text; };
+    setText('monthlyOverviewPeriod', `${y}년 ${Number(m)}월`);
+    setText('monthlyOverviewIncome', typeof formatStandard==='function' ? formatStandard(inc) : inc.toLocaleString()+'원');
+    setText('monthlyOverviewExpense', typeof formatStandard==='function' ? formatStandard(exp) : exp.toLocaleString()+'원');
+    setText('monthlyOverviewDonation', typeof formatStandard==='function' ? formatStandard(don) : don.toLocaleString()+'원');
+    setText('monthlyOverviewMissing', `${missing}건`);
+};
+
+// 2026-09-23 12단계: 미등록 영수증 연속 등록
+window.batchReceiptQueue = [];
+window.batchReceiptIndex = 0;
+window.pendingBatchReceiptImage = null;
+
+function batchReceiptEditableRows() {
+    const month = document.getElementById('batchReceiptMonth')?.value || 'all';
+    return (window.trans || [])
+        .filter(t => t && t.type === 'expense')
+        .filter(t => !window.getReceiptForTransaction(t.id))
+        .filter(t => month === 'all' || String(t.date || '').substring(5,7) === month)
+        .filter(t => !(window.isAccountingMonthLockedSync && window.isAccountingMonthLockedSync(t.date)))
+        .sort((a,b) => String(a.date||'').localeCompare(String(b.date||'')) || Number(a.id||0)-Number(b.id||0));
+}
+
+function clearBatchReceiptSelection() {
+    window.pendingBatchReceiptImage = null;
+    const cam = document.getElementById('batchReceiptCamera');
+    const gal = document.getElementById('batchReceiptGallery');
+    const status = document.getElementById('batchReceiptFileStatus');
+    if(cam) cam.value = '';
+    if(gal) gal.value = '';
+    if(status) status.textContent = '선택된 사진이 없습니다.';
+}
+
+function renderBatchReceiptCurrent() {
+    const q = window.batchReceiptQueue || [];
+    const progress = document.getElementById('batchReceiptProgress');
+    const info = document.getElementById('batchReceiptTransInfo');
+    const desc = document.getElementById('batchReceiptDesc');
+    if(!progress || !info) return;
+    if(!q.length || window.batchReceiptIndex >= q.length) {
+        progress.innerHTML = '✅ 선택한 범위의 미등록 영수증 처리가 완료되었습니다.';
+        info.innerHTML = '<div style="text-align:center;padding:18px 4px;color:#00a884;font-weight:800;">모든 미등록 지출을 확인했습니다.</div>';
+        if(desc) desc.value = '';
+        clearBatchReceiptSelection();
+        return;
+    }
+    const t = q[window.batchReceiptIndex];
+    progress.innerHTML = `<b>${window.batchReceiptIndex+1} / ${q.length}</b> · 남은 ${q.length-window.batchReceiptIndex}건`;
+    info.innerHTML = `<b>${window.escapeHtmlText ? window.escapeHtmlText(t.date||'') : (t.date||'')}</b><br>${window.escapeHtmlText ? window.escapeHtmlText(t.desc||'(내용 없음)') : (t.desc||'(내용 없음)')} <span class="ti-cat">${window.escapeHtmlText ? window.escapeHtmlText(t.cat||'') : (t.cat||'')}</span><br><b style="color:var(--expense);">-${formatStandard(Number(t.amt||0))}</b>`;
+    if(desc) desc.value = t.desc || '';
+    clearBatchReceiptSelection();
+}
+
+window.openBatchReceiptManager = () => {
+    if(!window.isAdmin) return alert('관리자만 사용할 수 있습니다.');
+    const monthSel = document.getElementById('batchReceiptMonth');
+    const receiptMonth = document.getElementById('rFilterMonth')?.value;
+    const currentMonth = formatKoreaISODate().substring(5,7);
+    if(monthSel) monthSel.value = receiptMonth && receiptMonth !== 'all' ? receiptMonth : currentMonth;
+    document.getElementById('batchReceiptModal').style.display = 'flex';
+    reloadBatchReceiptQueue();
+};
+
+window.closeBatchReceiptManager = () => {
+    document.getElementById('batchReceiptModal').style.display = 'none';
+    clearBatchReceiptSelection();
+};
+
+window.reloadBatchReceiptQueue = () => {
+    window.batchReceiptQueue = batchReceiptEditableRows();
+    window.batchReceiptIndex = 0;
+    renderBatchReceiptCurrent();
+};
+
+window.handleBatchReceiptFile = async (input) => {
+    const file = input?.files?.[0];
+    if(!file) return;
+    const status = document.getElementById('batchReceiptFileStatus');
+    window.pendingBatchReceiptImage = null;
+    if(status) status.textContent = '사진을 읽고 용량을 줄이는 중입니다...';
+    try {
+        const compressed = await compressReceiptFile(file, 1280, 480 * 1024);
+        window.pendingBatchReceiptImage = compressed;
+        const bytes = Math.ceil((compressed.length - compressed.indexOf(',') - 1) * 0.75);
+        if(status) status.textContent = `선택 완료: ${file.name || '촬영 사진'} · ${(bytes/1024).toFixed(0)}KB`;
+    } catch(err) {
+        console.error(err);
+        input.value = '';
+        if(status) status.textContent = '사진 처리 실패 — 다시 선택해주세요.';
+        alert('사진을 불러오지 못했습니다.\n' + err.message);
+    }
+};
+
+window.saveBatchReceiptAndNext = async () => {
+    if(!window.isAdmin) return alert('관리자만 사용할 수 있습니다.');
+    const q = window.batchReceiptQueue || [];
+    const t = q[window.batchReceiptIndex];
+    if(!t) return alert('처리할 미등록 지출이 없습니다.');
+    if(!(await window.ensureAccountingMonthEditable(t.date, '영수증 등록'))) return;
+    if(window.getReceiptForTransaction(t.id)) {
+        window.batchReceiptIndex++;
+        renderBatchReceiptCurrent();
+        return;
+    }
+    const image = window.pendingBatchReceiptImage;
+    if(!image) return alert('영수증 사진을 먼저 촬영하거나 선택해주세요.');
+    const desc = document.getElementById('batchReceiptDesc')?.value.trim() || t.desc || '';
+    const overlay = document.getElementById('loadingOverlay');
+    document.getElementById('loadingMsg').innerText = `영수증 저장 중... (${window.batchReceiptIndex+1}/${q.length})`;
+    overlay.style.display = 'flex';
+    try {
+        const receipt = {
+            id: Date.now(), date: t.date, img: image, desc, transactionId: t.id,
+            transactionAmount: Number(t.amt || 0), transactionCategory: t.cat || '', linkedAt: getKoreaTimestampISO()
+        };
+        window.receipts.unshift(receipt);
+        await persistReceiptItem(receipt);
+        t.receiptId = receipt.id;
+        t.receiptLinkedAt = receipt.linkedAt;
+        await persistTransItem(t);
+        window.batchReceiptIndex++;
+        renderLedger();
+        renderReceipts();
+        renderBatchReceiptCurrent();
+    } catch(err) {
+        console.error(err);
+        alert('영수증 저장에 실패했습니다.\n' + err.message);
+    } finally {
+        overlay.style.display = 'none';
+    }
+};
+
+window.skipBatchReceipt = () => {
+    const q = window.batchReceiptQueue || [];
+    if(!q.length || window.batchReceiptIndex >= q.length) return;
+    window.batchReceiptIndex++;
+    renderBatchReceiptCurrent();
 };
 
 window.uploadReceipt = async () => {
