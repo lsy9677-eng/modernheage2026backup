@@ -2274,6 +2274,9 @@ function duplicateTextScore(a, b) {
     return (2 * common) / Math.max(1, gx.size + gy.size);
 }
 
+window.normalizeDuplicateText = normalizeDuplicateText;
+window.duplicateTextScore = duplicateTextScore;
+
 function findPossibleDuplicateTrans(candidate) {
     const rows = Array.isArray(window.trans) ? window.trans : [];
     return rows
@@ -5184,9 +5187,9 @@ function monthEndDuplicateRecords(rows) {
             if(String(a.date||'') !== String(b.date||'')) continue;
             if(String(a.type||'') !== String(b.type||'')) continue;
             if(Number(a.amt||0) !== Number(b.amt||0)) continue;
-            const score = duplicateTextScore(a.desc,b.desc);
+            const score = window.duplicateTextScore(a.desc,b.desc);
             const sameCat = String(a.cat||'') === String(b.cat||'');
-            if(score >= .64 || (sameCat && score >= .5) || normalizeDuplicateText(a.desc) === normalizeDuplicateText(b.desc)) {
+            if(score >= .64 || (sameCat && score >= .5) || window.normalizeDuplicateText(a.desc) === window.normalizeDuplicateText(b.desc)) {
                 suspects.set(String(a.id), {t:a, note:`중복 의심: ${b.desc || '(내용없음)'}`});
                 suspects.set(String(b.id), {t:b, note:`중복 의심: ${a.desc || '(내용없음)'}`});
             }
