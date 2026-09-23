@@ -240,6 +240,26 @@ th:first-child, td:first-child {
         .smart-cat-chip small { font-size:.66rem; font-weight:600; color:#7f8c8d; margin-left:4px; }
         .smart-cat-chip:active { transform:scale(.97); }
 
+
+        /* 2026-09-23 9단계: 사용 패턴 기반 자동 추천 빠른입력 */
+        .dynamic-quick-box { margin: 2px 0 12px; padding: 11px; background:#fffdf6; border:1px solid #f3e4a8; border-radius:14px; }
+        .dynamic-quick-head { display:flex; justify-content:space-between; gap:8px; align-items:center; margin-bottom:8px; }
+        .dynamic-quick-title { font-size:.78rem; font-weight:900; color:#5f4b00; }
+        .dynamic-quick-note { font-size:.64rem; color:#8a7a45; white-space:nowrap; }
+        .dynamic-quick-chips { display:flex; flex-wrap:wrap; gap:7px; }
+        .dynamic-quick-chip { border:1px solid #ead58a; background:#fff; color:#2d3436; border-radius:12px; padding:8px 10px; cursor:pointer; text-align:left; line-height:1.25; min-width:0; max-width:100%; box-shadow:0 2px 6px rgba(0,0,0,.04); }
+        .dynamic-quick-chip .dq-main { display:block; font-size:.78rem; font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:210px; }
+        .dynamic-quick-chip .dq-meta { display:block; margin-top:3px; font-size:.64rem; color:#7f8c8d; font-weight:700; }
+        .dynamic-quick-chip.income { border-color:#c9e5ff; background:#f8fcff; }
+        .dynamic-quick-chip.expense { border-color:#ffd4cf; background:#fff9f8; }
+        .dynamic-quick-chip:active { transform:scale(.97); }
+        @media (max-width:600px) {
+            .dynamic-quick-head { align-items:flex-start; }
+            .dynamic-quick-note { white-space:normal; text-align:right; }
+            .dynamic-quick-chip { flex:1 1 calc(50% - 7px); }
+            .dynamic-quick-chip .dq-main { max-width:145px; }
+        }
+
         .ledger-entry-main { display:flex; align-items:center; width:100%; gap:10px; }
         .ledger-entry-info { flex:1; min-width:0; }
         .ledger-entry-side { display:flex; align-items:center; gap:8px; flex-shrink:0; }
@@ -686,6 +706,13 @@ th:first-child, td:first-child {
             <div class="smart-cat-recommend" id="smartCatRecommend">
                 <div class="smart-cat-title">💡 과거 장부 기준 추천 항목</div>
                 <div class="smart-cat-chips" id="smartCatChips"></div>
+            </div>
+            <div class="dynamic-quick-box" id="dynamicQuickBox">
+                <div class="dynamic-quick-head">
+                    <div class="dynamic-quick-title">⚡ 자동 추천 빠른입력</div>
+                    <div class="dynamic-quick-note">최근 사용량에 따라 자동 변경</div>
+                </div>
+                <div class="dynamic-quick-chips" id="dynamicQuickChips"></div>
             </div>
             <!-- ✅ 빠른 월 선택 버튼 (월회비 입력 시 표시) -->
             <div id="quickMonthArea" style="display:none; margin-bottom:6px;">
@@ -1953,6 +1980,7 @@ window.saveAndExit = () => {
         resetSelectedDuesMonths();
         document.getElementById('acList').classList.remove('show');
         if (typeof hideSmartCategoryRecommendations === 'function') hideSmartCategoryRecommendations();
+        if (typeof window.renderDynamicQuickRecommendations === 'function') window.renderDynamicQuickRecommendations();
         // ✅ tCat 변경 시 빠른 월 영역 재갱신
         el.onchange = () => {
             const desc = document.getElementById('tDesc').value.trim();
@@ -2312,6 +2340,7 @@ window.addTrans = async () => {
         setTimeout(() => { btn.innerText = "입력 완료"; btn.classList.remove('saved'); }, 1000);
         document.getElementById('tAmt').value=''; document.getElementById('tDesc').value='';
         resetSelectedDuesMonths();
+        if (typeof window.renderDynamicQuickRecommendations === 'function') window.renderDynamicQuickRecommendations();
     }
 
     function createFilterChips() {
@@ -2808,6 +2837,119 @@ function checkRoleMatch(memberRole, groupKey) {
         }
         return guess;
     }
+
+    // 2026-09-23 9단계: 고정 즐겨찾기 대신 사용 패턴 기반 자동 추천 빠른입력
+    function quickDateAgeDays(dateStr) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) return 9999;
+        const d = new Date(`${dateStr}T00:00:00`);
+        const nowText = (typeof formatKoreaISODate === 'function') ? formatKoreaISODate() : new Date().toISOString().slice(0,10);
+        const now = new Date(`${nowText}T00:00:00`);
+        const diff = Math.floor((now - d) / 86400000);
+        return Number.isFinite(diff) ? Math.max(0, diff) : 9999;
+    }
+
+    function buildDynamicQuickRecommendations() {
+        const rows = Array.isArray(window.trans) ? window.trans : [];
+        const groups = new Map();
+        const excludeCats = new Set(['월회비','가입비','찬조금']);
+
+        rows.forEach(t => {
+            if (!t || !['income','expense'].includes(t.type)) return;
+            const desc = String(t.desc || '').trim();
+            const cat = String(t.cat || '').trim();
+            if (!desc || !cat || excludeCats.has(cat)) return;
+            const norm = normalizeLedgerKeyword(desc);
+            if (!norm) return;
+            const key = `${t.type}|${cat}|${norm}`;
+            if (!groups.has(key)) groups.set(key, {
+                type:t.type, cat, desc, count:0, score:0, latestDate:'', latestAmt:0,
+                amounts:new Map(), recent30:0, recent90:0
+            });
+            const g = groups.get(key);
+            const age = quickDateAgeDays(t.date);
+            g.count += 1;
+            if (age <= 30) { g.score += 8; g.recent30 += 1; }
+            else if (age <= 90) { g.score += 4; g.recent90 += 1; }
+            else g.score += 1;
+            if (age <= 7) g.score += 10;
+            else if (age <= 30) g.score += 6;
+            else if (age <= 90) g.score += 3;
+            const amt = Number(t.amt || 0);
+            if (amt > 0) g.amounts.set(amt, (g.amounts.get(amt) || 0) + 1);
+            if (!g.latestDate || String(t.date || '') > g.latestDate || (String(t.date || '') === g.latestDate && Number(t.id||0) > Number(g.latestId||0))) {
+                g.latestDate = String(t.date || '');
+                g.latestAmt = amt;
+                g.latestId = Number(t.id || 0);
+                g.desc = desc;
+            }
+        });
+
+        let list = Array.from(groups.values());
+        list.forEach(g => {
+            let modeAmt = 0, modeCount = 0;
+            for (const [amt,cnt] of g.amounts.entries()) {
+                if (cnt > modeCount || (cnt === modeCount && amt === g.latestAmt)) { modeAmt = amt; modeCount = cnt; }
+            }
+            g.stableAmount = g.count >= 2 && modeCount / g.count >= 0.67 ? modeAmt : 0;
+            g.score += Math.min(g.count, 10) * 2;
+        });
+        list.sort((a,b) => b.score - a.score || String(b.latestDate).localeCompare(String(a.latestDate)) || b.count-a.count);
+
+        // 누적 사용이 생긴 뒤 자동 추천이 의미 있으므로 2회 이상을 우선하고,
+        // 후보가 부족할 때만 최근 1회 사용 항목으로 채운다.
+        const repeated = list.filter(x => x.count >= 2);
+        const singles = list.filter(x => x.count < 2);
+        return repeated.concat(singles).slice(0,5);
+    }
+
+    window.renderDynamicQuickRecommendations = () => {
+        const box = document.getElementById('dynamicQuickBox');
+        const chips = document.getElementById('dynamicQuickChips');
+        if (!box || !chips) return;
+        const list = buildDynamicQuickRecommendations();
+        if (!list.length) {
+            box.style.display = 'none';
+            chips.innerHTML = '';
+            return;
+        }
+        box.style.display = '';
+        chips.innerHTML = list.map((x,i) => {
+            const typeLabel = x.type === 'income' ? '수입' : '지출';
+            const amountText = x.stableAmount
+                ? `${Number(x.stableAmount).toLocaleString()}원 자동`
+                : (x.latestAmt ? `최근 ${Number(x.latestAmt).toLocaleString()}원 · 금액확인` : '금액 직접입력');
+            return `<button type="button" class="dynamic-quick-chip ${x.type}" data-type="${escapeHtmlText(x.type)}" data-cat="${escapeHtmlText(x.cat)}" data-desc="${escapeHtmlText(x.desc)}" data-amt="${x.stableAmount || 0}" onclick="applyDynamicQuickRecommendation(this)">
+                <span class="dq-main">${i===0?'⭐ ':''}${escapeHtmlText(x.desc)}</span>
+                <span class="dq-meta">${typeLabel} · ${escapeHtmlText(x.cat)} · ${x.count}회 · ${amountText}</span>
+            </button>`;
+        }).join('');
+    };
+
+    window.applyDynamicQuickRecommendation = (el) => {
+        if (!el) return;
+        const type = el.dataset.type || '';
+        const cat = el.dataset.cat || '';
+        const desc = el.dataset.desc || '';
+        const amt = Number(el.dataset.amt || 0);
+        const typeEl = document.getElementById('tType');
+        const catEl = document.getElementById('tCat');
+        const descEl = document.getElementById('tDesc');
+        const amtEl = document.getElementById('tAmt');
+        if (!typeEl || !catEl || !descEl || !amtEl) return;
+
+        if (typeEl.value !== type) {
+            typeEl.value = type;
+            setCategories();
+        }
+        if (Array.from(catEl.options).some(op => op.value === cat)) catEl.value = cat;
+        descEl.value = desc;
+        if (amt > 0) amtEl.value = amt;
+        else amtEl.value = '';
+        hideSmartCategoryRecommendations();
+        document.getElementById('acList').classList.remove('show');
+        if (amt > 0) descEl.focus();
+        else amtEl.focus();
+    };
 
     // 2026-09-23 3단계: 내용 입력창을 누르면 현재 수입/지출의 최근 사용 항목 5개 표시
     function buildRecentLedgerHistorySuggestions(type) {
@@ -4718,7 +4860,7 @@ window.uploadReceipt = async () => {
             closeAuditReport();
         }
     }
-    window.renderAll = () => { renderLedger(); renderStats(); renderMembers(); renderUnpaid(); renderReceipts(); renderCalendar(); updateAdminUI(); }
+    window.renderAll = () => { renderLedger(); renderStats(); renderMembers(); renderUnpaid(); renderReceipts(); renderCalendar(); updateAdminUI(); if (typeof window.renderDynamicQuickRecommendations === 'function') window.renderDynamicQuickRecommendations(); }
     window.exportData = () => { const d={trans:window.trans, members:window.members, receipts:window.receipts, events:window.events, settings:window.settings}; const b=new Blob([JSON.stringify(d)],{type:'application/json'}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download='backup.json'; a.click(); }
     window.importData = (input) => {
         const f=input.files[0]; if(!f) return;
