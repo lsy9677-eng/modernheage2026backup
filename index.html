@@ -587,6 +587,33 @@ th:first-child, td:first-child {
             .item-actions { gap:5px; margin-left:3px; }
         }
 
+    
+
+        /* 2026-09-23 7단계: 월말 마감 점검 */
+        .month-end-check-modal .modal { max-width:520px; }
+        .month-end-toolbar { display:grid; grid-template-columns:1fr 1fr auto; gap:8px; align-items:end; margin:8px 0 14px; }
+        .month-end-toolbar select { margin-bottom:0; padding:10px; }
+        .month-end-run { border:0; background:#2d3436; color:#fff; border-radius:12px; padding:11px 14px; font-weight:800; cursor:pointer; white-space:nowrap; }
+        .month-end-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+        .month-end-stat { background:#f8f9fa; border:1px solid #eee; border-radius:12px; padding:10px; text-align:center; }
+        .month-end-stat b { display:block; font-size:1.25rem; margin-top:3px; }
+        .month-end-section { border-top:1px solid #eee; padding-top:12px; margin-top:12px; }
+        .month-end-section-title { font-weight:900; margin-bottom:7px; display:flex; justify-content:space-between; gap:10px; }
+        .month-end-row { background:#fff; border:1px solid #eee; border-radius:10px; padding:9px 10px; margin-bottom:7px; cursor:pointer; }
+        .month-end-row:active { transform:scale(.99); }
+        .month-end-row-main { display:flex; justify-content:space-between; gap:10px; font-size:.84rem; font-weight:800; }
+        .month-end-row-sub { margin-top:3px; color:#636e72; font-size:.73rem; line-height:1.35; word-break:break-word; }
+        .month-end-actions { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+        .month-end-action-btn { border:1px solid #dfe6e9; background:#fff; color:#2d3436; border-radius:9px; padding:7px 10px; font-size:.72rem; font-weight:800; cursor:pointer; }
+        .month-end-action-btn.receipt { background:#fff8e8; border-color:#ffd59a; color:#a75b00; }
+        .month-end-action-btn.edit { background:#eef7ff; border-color:#b9dcff; color:#1769aa; }
+        .month-end-action-btn:active { transform:scale(.97); }
+        .month-end-empty { color:#00b894; background:#effff9; border:1px solid #b8f0dd; padding:10px; border-radius:10px; font-size:.8rem; }
+        @media (max-width:600px) {
+            .month-end-toolbar { grid-template-columns:1fr 1fr; }
+            .month-end-run { grid-column:1 / -1; width:100%; }
+        }
+
     </style>
 </head>
 <body>
@@ -636,6 +663,7 @@ th:first-child, td:first-child {
             <div class="section-title"><span>📝 수입/지출 관리</span></div>
             <div style="display:flex; gap:5px;">
                 <button class="btn-sub admin-only" style="background:#e8fff8; color:#007f63; border:1px solid #a7ead8;" onclick="openRestorePointManager()">⏱ 자동복구점</button>
+                <button class="btn-sub admin-only" style="background:#fff7e6; color:#a75b00; border:1px solid #ffd59a;" onclick="openMonthEndCheck()">✅ 월말점검</button>
                 <button class="btn-sub" style="background:#fff; color:var(--primary); border:1px solid var(--primary);" onclick="goTab('report')">📊 결산및 감사보고</button>
             </div>
         </div>
@@ -2187,6 +2215,63 @@ window.clearLedgerSearch = () => {
     renderLedger();
 };
 
+// 2026-09-23 6단계: 중복 입력 감지
+function normalizeDuplicateText(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[\-_.·,()/\[\]{}:;!?]/g, '');
+}
+
+function duplicateTextScore(a, b) {
+    const x = normalizeDuplicateText(a);
+    const y = normalizeDuplicateText(b);
+    if (!x || !y) return 0;
+    if (x === y) return 1;
+    if (x.includes(y) || y.includes(x)) {
+        const minLen = Math.min(x.length, y.length);
+        const maxLen = Math.max(x.length, y.length);
+        return maxLen ? Math.max(0.78, minLen / maxLen) : 0;
+    }
+    // 간단한 bigram 유사도: 오탐을 줄이기 위해 짧은 단어는 엄격하게 처리
+    if (x.length < 3 || y.length < 3) return 0;
+    const grams = str => {
+        const out = new Set();
+        for (let i=0; i<str.length-1; i++) out.add(str.slice(i,i+2));
+        return out;
+    };
+    const gx = grams(x), gy = grams(y);
+    let common = 0;
+    gx.forEach(g => { if (gy.has(g)) common++; });
+    return (2 * common) / Math.max(1, gx.size + gy.size);
+}
+
+function findPossibleDuplicateTrans(candidate) {
+    const rows = Array.isArray(window.trans) ? window.trans : [];
+    return rows
+        .filter(t => t && String(t.date || '') === String(candidate.date || ''))
+        .filter(t => String(t.type || '') === String(candidate.type || ''))
+        .filter(t => Number(t.amt || 0) === Number(candidate.amt || 0))
+        .map(t => ({ ...t, _dupScore: duplicateTextScore(t.desc, candidate.desc) }))
+        .filter(t => {
+            const sameCat = String(t.cat || '') === String(candidate.cat || '');
+            const exactDesc = normalizeDuplicateText(t.desc) === normalizeDuplicateText(candidate.desc);
+            return exactDesc || t._dupScore >= 0.64 || (sameCat && t._dupScore >= 0.5);
+        })
+        .sort((a,b) => b._dupScore - a._dupScore || Number(b.id||0)-Number(a.id||0))
+        .slice(0, 3);
+}
+
+function confirmPossibleDuplicate(candidate) {
+    const hits = findPossibleDuplicateTrans(candidate);
+    if (!hits.length) return true;
+    const lines = hits.map((t, i) => {
+        const kind = t.type === 'income' ? '수입' : '지출';
+        return `${i+1}. ${t.date} · ${kind}/${t.cat || '항목없음'}\n   ${t.desc || '(내용없음)'} · ${Number(t.amt||0).toLocaleString()}원`;
+    }).join('\n\n');
+    return confirm(`⚠️ 비슷한 장부가 이미 있습니다.\n\n${lines}\n\n실제로 같은 금액이 다시 발생한 내역이면 [확인]을 눌러 그대로 저장하세요.\n중복 입력 같으면 [취소]를 눌러 기존 장부를 확인하세요.`);
+}
+
 window.addTrans = async () => {
         if(!window.isAdmin) return alert('관리자만 입력 가능합니다.');
         const date = document.getElementById('tDate').value;
@@ -2195,6 +2280,8 @@ window.addTrans = async () => {
         const amt = parseInt(document.getElementById('tAmt').value);
         const desc = document.getElementById('tDesc').value.trim();
         if(!date || !amt) return alert('금액 입력하세요.');
+
+        if (!confirmPossibleDuplicate({ date, type, cat, amt, desc })) return;
 
         const matchedMember = (type === 'income' && ['가입비','월회비','찬조금'].includes(cat))
             ? findMemberFromDesc(desc)
@@ -4889,7 +4976,178 @@ window.uploadReceipt = async () => {
   // 강제 새로고침
   try { location.reload(true); } catch(e) { location.reload(); }
 })();
+
+
+// 2026-09-23 8단계: 월말점검 바로수정/영수증 연결
+window.openMonthEndCheck = () => {
+    if(!window.isAdmin) return alert('관리자만 사용할 수 있습니다.');
+    const modal = document.getElementById('monthEndCheckModal');
+    const ySel = document.getElementById('monthEndYear');
+    const mSel = document.getElementById('monthEndMonth');
+    if(!modal || !ySel || !mSel) return;
+
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = String(now.getMonth()+1).padStart(2,'0');
+    const years = new Set([curYear]);
+    (window.trans || []).forEach(t => {
+        const y = String(t && t.date || '').slice(0,4);
+        if(/^\d{4}$/.test(y)) years.add(Number(y));
+    });
+    ySel.innerHTML = Array.from(years).sort((a,b)=>b-a).map(y=>`<option value="${y}">${y}년</option>`).join('');
+    mSel.innerHTML = Array.from({length:12},(_,i)=>String(i+1).padStart(2,'0')).map(m=>`<option value="${m}">${Number(m)}월</option>`).join('');
+
+    // 현재 장부 월 필터가 하나만 선택돼 있으면 그 월을 우선 사용
+    let preferredMonth = curMonth;
+    if(window.selectedMonths && !window.selectedMonths.has('all') && window.selectedMonths.size === 1) {
+        preferredMonth = Array.from(window.selectedMonths)[0];
+    }
+    ySel.value = String(curYear);
+    mSel.value = preferredMonth;
+    modal.style.display = 'flex';
+    runMonthEndCheck();
+};
+
+window.closeMonthEndCheck = () => {
+    const modal = document.getElementById('monthEndCheckModal');
+    if(modal) modal.style.display = 'none';
+};
+
+function monthEndRowHtml(t, note='', options={}) {
+    const kind = t.type === 'income' ? '수입' : '지출';
+    const desc = escapeHtmlText(String(t.desc || '(내용 없음)'));
+    const cat = escapeHtmlText(String(t.cat || '항목 없음'));
+    const id = Number(t.id)||0;
+    const noteHtml = note ? `<div class="month-end-row-sub">${escapeHtmlText(note)}</div>` : '';
+    const showReceipt = !!options.receipt && t.type === 'expense';
+    const actions = `
+        <div class="month-end-actions">
+            ${showReceipt ? `<button class="month-end-action-btn receipt" onclick="event.stopPropagation(); monthEndAddReceipt(${id})">🧾 영수증 등록</button>` : ''}
+            <button class="month-end-action-btn edit" onclick="event.stopPropagation(); monthEndEditTrans(${id})">✏️ 장부 수정</button>
+        </div>`;
+    return `<div class="month-end-row" onclick="jumpToMonthEndLedger(${id})">
+        <div class="month-end-row-main"><span>${escapeHtmlText(String(t.date||''))} · ${kind}/${cat}</span><span>${Number(t.amt||0).toLocaleString()}원</span></div>
+        <div class="month-end-row-sub">${desc}</div>${noteHtml}${actions}
+    </div>`;
+}
+
+function monthEndDuplicateRecords(rows) {
+    const suspects = new Map();
+    for(let i=0;i<rows.length;i++) {
+        for(let j=i+1;j<rows.length;j++) {
+            const a=rows[i], b=rows[j];
+            if(String(a.date||'') !== String(b.date||'')) continue;
+            if(String(a.type||'') !== String(b.type||'')) continue;
+            if(Number(a.amt||0) !== Number(b.amt||0)) continue;
+            const score = duplicateTextScore(a.desc,b.desc);
+            const sameCat = String(a.cat||'') === String(b.cat||'');
+            if(score >= .64 || (sameCat && score >= .5) || normalizeDuplicateText(a.desc) === normalizeDuplicateText(b.desc)) {
+                suspects.set(String(a.id), {t:a, note:`중복 의심: ${b.desc || '(내용없음)'}`});
+                suspects.set(String(b.id), {t:b, note:`중복 의심: ${a.desc || '(내용없음)'}`});
+            }
+        }
+    }
+    return Array.from(suspects.values());
+}
+
+window.runMonthEndCheck = () => {
+    if(!window.isAdmin) return;
+    const y = document.getElementById('monthEndYear')?.value;
+    const m = document.getElementById('monthEndMonth')?.value;
+    const result = document.getElementById('monthEndCheckResult');
+    if(!result || !y || !m) return;
+    const prefix = `${y}-${m}`;
+    const rows = (window.trans || []).filter(t => String(t.date||'').startsWith(prefix));
+    const receiptMissing = rows.filter(t => t.type === 'expense' && !getReceiptForTransaction(t.id));
+    const emptyDesc = rows.filter(t => !String(t.desc||'').trim());
+    const invalidAmount = rows.filter(t => !Number(t.amt||0) || Number(t.amt||0) < 0);
+    const dupRows = monthEndDuplicateRecords(rows);
+
+    const issueIds = new Set([
+        ...receiptMissing.map(x=>String(x.id)),
+        ...emptyDesc.map(x=>String(x.id)),
+        ...invalidAmount.map(x=>String(x.id)),
+        ...dupRows.map(x=>String(x.t.id))
+    ]);
+    const totalInc = rows.filter(t=>t.type==='income').reduce((a,t)=>a+Number(t.amt||0),0);
+    const totalExp = rows.filter(t=>t.type==='expense').reduce((a,t)=>a+Number(t.amt||0),0);
+
+    const section = (title, arr, renderer) => `
+        <div class="month-end-section">
+            <div class="month-end-section-title"><span>${title}</span><span>${arr.length}건</span></div>
+            ${arr.length ? arr.map(renderer).join('') : '<div class="month-end-empty">✅ 이상 없음</div>'}
+        </div>`;
+
+    result.innerHTML = `
+        <div style="background:${issueIds.size?'#fff8e8':'#effff9'};border:1px solid ${issueIds.size?'#ffe0a3':'#b8f0dd'};padding:11px;border-radius:12px;margin-bottom:10px;font-weight:800;">
+            ${issueIds.size ? `⚠️ 확인이 필요한 장부 ${issueIds.size}건` : '✅ 현재 점검 항목에서 이상이 없습니다.'}
+            <div style="font-size:.72rem;font-weight:500;color:#636e72;margin-top:4px;">${y}년 ${Number(m)}월 · 전체 ${rows.length}건 · 수입 ${totalInc.toLocaleString()}원 · 지출 ${totalExp.toLocaleString()}원</div>
+        </div>
+        <div class="month-end-summary">
+            <div class="month-end-stat">🧾 영수증 미등록<b>${receiptMissing.length}</b></div>
+            <div class="month-end-stat">⚠️ 중복 의심<b>${dupRows.length}</b></div>
+            <div class="month-end-stat">📝 내용 누락<b>${emptyDesc.length}</b></div>
+            <div class="month-end-stat">💰 금액 이상<b>${invalidAmount.length}</b></div>
+        </div>
+        ${section('🧾 영수증 미등록 지출', receiptMissing, t=>monthEndRowHtml(t,'영수증이 연결되지 않았습니다.',{receipt:true}))}
+        ${section('⚠️ 중복 입력 의심', dupRows, x=>monthEndRowHtml(x.t,x.note))}
+        ${section('📝 내용 누락', emptyDesc, t=>monthEndRowHtml(t,'세부내용이 비어 있습니다.'))}
+        ${section('💰 금액 이상', invalidAmount, t=>monthEndRowHtml(t,'금액이 0원이거나 올바르지 않습니다.'))}
+    `;
+};
+
+window.monthEndEditTrans = (id) => {
+    if(!window.isAdmin) return alert('관리자만 사용할 수 있습니다.');
+    const t = (window.trans || []).find(x => String(x.id) === String(id));
+    if(!t) return alert('해당 장부를 찾을 수 없습니다.');
+    closeMonthEndCheck();
+    openEditTrans(Number(t.id));
+};
+
+window.monthEndAddReceipt = (id) => {
+    if(!window.isAdmin) return alert('관리자만 사용할 수 있습니다.');
+    const t = (window.trans || []).find(x => String(x.id) === String(id));
+    if(!t) return alert('해당 장부를 찾을 수 없습니다.');
+    if(t.type !== 'expense') return alert('지출 내역에만 영수증을 등록할 수 있습니다.');
+    closeMonthEndCheck();
+    openLinkedReceiptModal(Number(t.id));
+};
+
+window.jumpToMonthEndLedger = (id) => {
+    const t = (window.trans || []).find(x => String(x.id) === String(id));
+    if(!t) return;
+    closeMonthEndCheck();
+    window.selectedMonths = new Set(['all']);
+    window.selectedCats = new Set(['all']);
+    window.receiptStatusFilter = 'all';
+    const search = document.getElementById('ledgerSearch');
+    if(search) search.value = String(t.desc || t.amt || '');
+    const clearBtn = document.getElementById('ledgerSearchClear');
+    if(clearBtn) clearBtn.style.display = search && search.value ? 'block' : 'none';
+    window.curLedgerPage = 1;
+    createFilterChips();
+    document.querySelectorAll('#receiptStatusChips .filter-chip').forEach((b,i)=>b.classList.toggle('active',i===0));
+    renderLedger();
+    goTab('ledger');
+    setTimeout(()=>document.getElementById('ledgerSearch')?.scrollIntoView({behavior:'smooth',block:'center'}),50);
+};
+
 </script>
+
+
+<div class="modal-wrap month-end-check-modal" id="monthEndCheckModal" onclick="if(event.target===this) closeMonthEndCheck()">
+    <div class="modal">
+        <button class="modal-close-x" onclick="closeMonthEndCheck()">×</button>
+        <div style="font-size:1.2rem;font-weight:900;margin-bottom:4px;">✅ 월말 마감 점검</div>
+        <div style="font-size:.78rem;color:#636e72;line-height:1.45;">선택한 월의 장부를 저장 변경 없이 검사합니다. 문제가 있는 내역을 누르면 장부 검색으로 바로 이동합니다.</div>
+        <div class="month-end-toolbar">
+            <div><div style="font-size:.7rem;color:#888;margin-bottom:4px;">연도</div><select id="monthEndYear"></select></div>
+            <div><div style="font-size:.7rem;color:#888;margin-bottom:4px;">월</div><select id="monthEndMonth"></select></div>
+            <button class="month-end-run" onclick="runMonthEndCheck()">점검하기</button>
+        </div>
+        <div id="monthEndCheckResult"></div>
+    </div>
+</div>
 
 </body>
 </html>
