@@ -2663,6 +2663,8 @@ function checkRoleMatch(memberRole, groupKey) {
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
+    // 월말점검 등 일반 스크립트에서도 사용할 수 있도록 전역 노출
+    window.escapeHtmlText = escapeHtmlText;
 
     function normalizeLedgerKeyword(v) {
         return String(v || '').toLowerCase().replace(/\s+/g, '').trim();
@@ -5163,10 +5165,10 @@ window.closeMonthEndCheck = () => {
 
 function monthEndRowHtml(t, note='', options={}) {
     const kind = t.type === 'income' ? '수입' : '지출';
-    const desc = escapeHtmlText(String(t.desc || '(내용 없음)'));
-    const cat = escapeHtmlText(String(t.cat || '항목 없음'));
+    const desc = window.escapeHtmlText(String(t.desc || '(내용 없음)'));
+    const cat = window.escapeHtmlText(String(t.cat || '항목 없음'));
     const id = Number(t.id)||0;
-    const noteHtml = note ? `<div class="month-end-row-sub">${escapeHtmlText(note)}</div>` : '';
+    const noteHtml = note ? `<div class="month-end-row-sub">${window.escapeHtmlText(note)}</div>` : '';
     const showReceipt = !!options.receipt && t.type === 'expense';
     const actions = `
         <div class="month-end-actions">
@@ -5174,7 +5176,7 @@ function monthEndRowHtml(t, note='', options={}) {
             <button class="month-end-action-btn edit" onclick="event.stopPropagation(); monthEndEditTrans(${id})">✏️ 장부 수정</button>
         </div>`;
     return `<div class="month-end-row" onclick="jumpToMonthEndLedger(${id})">
-        <div class="month-end-row-main"><span>${escapeHtmlText(String(t.date||''))} · ${kind}/${cat}</span><span>${Number(t.amt||0).toLocaleString()}원</span></div>
+        <div class="month-end-row-main"><span>${window.escapeHtmlText(String(t.date||''))} · ${kind}/${cat}</span><span>${Number(t.amt||0).toLocaleString()}원</span></div>
         <div class="month-end-row-sub">${desc}</div>${noteHtml}${actions}
     </div>`;
 }
