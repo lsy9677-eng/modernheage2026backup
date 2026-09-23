@@ -4208,6 +4208,9 @@ function getReceiptForTransaction(transId) {
     ) || null;
 }
 
+// 월말점검 등 일반 script에서도 사용할 수 있도록 전역 공개
+window.getReceiptForTransaction = getReceiptForTransaction;
+
 async function readReceiptFileAsDataURL(file) {
     if (!file) throw new Error('선택한 사진을 찾을 수 없습니다.');
 
@@ -5147,7 +5150,7 @@ window.openMonthEndCheck = () => {
     ySel.value = String(curYear);
     mSel.value = preferredMonth;
     modal.style.display = 'flex';
-    runMonthEndCheck();
+    window.runMonthEndCheck();
 };
 
 window.closeMonthEndCheck = () => {
@@ -5200,7 +5203,7 @@ window.runMonthEndCheck = () => {
     if(!result || !y || !m) return;
     const prefix = `${y}-${m}`;
     const rows = (window.trans || []).filter(t => String(t.date||'').startsWith(prefix));
-    const receiptMissing = rows.filter(t => t.type === 'expense' && !getReceiptForTransaction(t.id));
+    const receiptMissing = rows.filter(t => t.type === 'expense' && !window.getReceiptForTransaction(t.id));
     const emptyDesc = rows.filter(t => !String(t.desc||'').trim());
     const invalidAmount = rows.filter(t => !Number(t.amt||0) || Number(t.amt||0) < 0);
     const dupRows = monthEndDuplicateRecords(rows);
@@ -5283,8 +5286,8 @@ window.jumpToMonthEndLedger = (id) => {
         <div style="font-size:1.2rem;font-weight:900;margin-bottom:4px;">✅ 월말 마감 점검</div>
         <div style="font-size:.78rem;color:#636e72;line-height:1.45;">선택한 월의 장부를 저장 변경 없이 검사합니다. 문제가 있는 내역을 누르면 장부 검색으로 바로 이동합니다.</div>
         <div class="month-end-toolbar">
-            <div><div style="font-size:.7rem;color:#888;margin-bottom:4px;">연도</div><select id="monthEndYear"></select></div>
-            <div><div style="font-size:.7rem;color:#888;margin-bottom:4px;">월</div><select id="monthEndMonth"></select></div>
+            <div><div style="font-size:.7rem;color:#888;margin-bottom:4px;">연도</div><select id="monthEndYear" onchange="runMonthEndCheck()"></select></div>
+            <div><div style="font-size:.7rem;color:#888;margin-bottom:4px;">월</div><select id="monthEndMonth" onchange="runMonthEndCheck()"></select></div>
             <button class="month-end-run" onclick="runMonthEndCheck()">점검하기</button>
         </div>
         <div id="monthEndCheckResult"></div>
