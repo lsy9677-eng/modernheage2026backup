@@ -634,7 +634,22 @@ th:first-child, td:first-child {
             .month-end-run { grid-column:1 / -1; width:100%; }
         }
 
-    </style>
+    
+
+        /* 2026-09-23 10단계: 월 마감 잠금 + 변경 이력 */
+        .month-lock-bar { display:flex; justify-content:space-between; gap:10px; align-items:center; padding:10px 11px; margin:10px 0; border-radius:12px; background:#f8f9fa; border:1px solid #e8ecef; }
+        .month-lock-state { font-size:.8rem; font-weight:900; }
+        .month-lock-state.locked { color:#d63031; }
+        .month-lock-state.open { color:#00a67d; }
+        .month-lock-btn { border:0; border-radius:10px; padding:8px 11px; font-size:.75rem; font-weight:900; cursor:pointer; white-space:nowrap; }
+        .month-lock-btn.lock { background:#2d3436; color:#fff; }
+        .month-lock-btn.unlock { background:#fff0f0; color:#c0392b; border:1px solid #ffc8c8; }
+        .change-history-list { max-height:58vh; overflow:auto; padding-right:2px; }
+        .change-history-row { border:1px solid #e8ecef; border-radius:11px; padding:10px 11px; margin-bottom:8px; background:#fff; }
+        .change-history-head { display:flex; justify-content:space-between; gap:8px; font-size:.8rem; font-weight:900; }
+        .change-history-sub { margin-top:4px; color:#636e72; font-size:.72rem; line-height:1.4; word-break:break-word; }
+
+</style>
 </head>
 <body>
 
@@ -681,9 +696,10 @@ th:first-child, td:first-child {
     <div id="page-ledger" class="page active">
         <div class="section-header">
             <div class="section-title"><span>📝 수입/지출 관리</span></div>
-            <div style="display:flex; gap:5px;">
+            <div style="display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-end;">
                 <button class="btn-sub admin-only" style="background:#e8fff8; color:#007f63; border:1px solid #a7ead8;" onclick="openRestorePointManager()">⏱ 자동복구점</button>
                 <button class="btn-sub admin-only" style="background:#fff7e6; color:#a75b00; border:1px solid #ffd59a;" onclick="openMonthEndCheck()">✅ 월말점검</button>
+                <button class="btn-sub admin-only" style="background:#f4efff; color:#6c5ce7; border:1px solid #d8ccff;" onclick="openChangeHistory()">🕘 변경이력</button>
                 <button class="btn-sub" style="background:#fff; color:var(--primary); border:1px solid var(--primary);" onclick="goTab('report')">📊 결산및 감사보고</button>
             </div>
         </div>
@@ -1300,6 +1316,94 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from
 const CLUB_ROOT = 'clubData';
 const SAFETY_ROOT = 'accountingSafety';
 
+// ===== 2026-09-23 10단계: 월 마감 잠금 + 변경 이력 =====
+const MONTH_LOCK_ROOT = `${SAFETY_ROOT}/meta/monthLocks`;
+const CHANGE_HISTORY_ROOT = `${SAFETY_ROOT}/meta/changeHistory`;
+window.accountingMonthLocks = window.accountingMonthLocks || {};
+
+function accountingMonthKey(dateOrKey) {
+    const s = String(dateOrKey || '');
+    const m = s.match(/^(\d{4})-(\d{2})/);
+    return m ? `${m[1]}-${m[2]}` : '';
+}
+function compactTransForHistory(t) {
+    if(!t) return null;
+    return { id:t.id, date:t.date||'', type:t.type||'', cat:t.cat||'', amt:Number(t.amt||0), desc:String(t.desc||'').slice(0,120) };
+}
+function compactReceiptForHistory(r) {
+    if(!r) return null;
+    return { id:r.id, date:r.date||'', desc:String(r.desc||'').slice(0,120), transactionId:r.transactionId||'', transactionAmount:Number(r.transactionAmount||0), transactionCategory:r.transactionCategory||'' };
+}
+async function loadAccountingGovernance() {
+    try {
+        const snap = await get(ref(db, MONTH_LOCK_ROOT));
+        window.accountingMonthLocks = snap.val() || {};
+    } catch(e) { console.warn('월 마감 상태 조회 실패:', e); }
+    return window.accountingMonthLocks;
+}
+window.refreshAccountingGovernance = loadAccountingGovernance;
+window.isAccountingMonthLockedSync = (dateOrKey) => {
+    const key = accountingMonthKey(dateOrKey);
+    return !!(key && window.accountingMonthLocks && window.accountingMonthLocks[key]);
+};
+window.ensureAccountingMonthEditable = async (dateOrKey, action='변경') => {
+    const key = accountingMonthKey(dateOrKey);
+    if(!key) return true;
+    if(!(key in (window.accountingMonthLocks || {}))) {
+        try {
+            const snap = await get(ref(db, `${MONTH_LOCK_ROOT}/${key}`));
+            if(snap.exists()) window.accountingMonthLocks[key] = snap.val();
+        } catch(e) { console.warn('월 마감 확인 실패:', e); }
+    }
+    if(window.accountingMonthLocks && window.accountingMonthLocks[key]) {
+        alert(`🔒 ${key.replace('-', '년 ')}월은 마감된 장부입니다.\n${action}하려면 월말점검에서 먼저 마감 해제해 주세요.`);
+        return false;
+    }
+    return true;
+};
+window.appendAccountingChangeHistory = async (entry={}) => {
+    if(!window.isAdmin || !auth.currentUser) return;
+    try {
+        const now = Date.now();
+        const id = `${now}_${Math.random().toString(36).slice(2,7)}`;
+        const payload = {
+            id, atMs:now, at:getKoreaTimestampISO(),
+            user:auth.currentUser.email || auth.currentUser.uid || 'admin',
+            ...entry
+        };
+        await set(ref(db, `${CHANGE_HISTORY_ROOT}/${id}`), payload);
+        // 최근 100개만 유지
+        const snap = await get(ref(db, CHANGE_HISTORY_ROOT));
+        const obj = snap.val() || {};
+        const rows = Object.entries(obj).map(([k,v])=>({k, atMs:Number(v?.atMs||String(k).split('_')[0]||0)})).sort((a,b)=>b.atMs-a.atMs);
+        if(rows.length > 100) {
+            const updates={};
+            rows.slice(100).forEach(x => updates[`${CHANGE_HISTORY_ROOT}/${x.k}`]=null);
+            if(Object.keys(updates).length) await update(ref(db), updates);
+        }
+    } catch(e) { console.warn('변경 이력 저장 실패:', e); }
+};
+window.getAccountingChangeHistory = async () => {
+    try {
+        const snap = await get(ref(db, CHANGE_HISTORY_ROOT));
+        const obj = snap.val() || {};
+        return Object.values(obj).sort((a,b)=>Number(b?.atMs||0)-Number(a?.atMs||0));
+    } catch(e) { console.warn('변경 이력 조회 실패:', e); return []; }
+};
+window.setAccountingMonthLock = async (key, locked, summary={}) => {
+    if(!window.isAdmin || !auth.currentUser) throw new Error('관리자 로그인이 필요합니다.');
+    key = accountingMonthKey(key);
+    if(!key) throw new Error('월 정보가 올바르지 않습니다.');
+    const value = locked ? { locked:true, at:getKoreaTimestampISO(), atMs:Date.now(), user:auth.currentUser.email || auth.currentUser.uid || 'admin', summary } : null;
+    await set(ref(db, `${MONTH_LOCK_ROOT}/${key}`), value);
+    if(locked) window.accountingMonthLocks[key] = value; else delete window.accountingMonthLocks[key];
+    await window.appendAccountingChangeHistory({ action:locked?'월 마감':'월 마감 해제', target:'month', month:key, detail:locked?'월 장부 잠금':'월 장부 잠금 해제' });
+    return true;
+};
+loadAccountingGovernance();
+// ==========================================================
+
+
 // [2026-08-19 데이터보호 강화]
 // 1) clubData 전체 덮어쓰기/자동 마이그레이션 금지
 // 2) 장부/영수증은 건별 원자적(update) 저장
@@ -1754,6 +1858,7 @@ async function persistTransItem(item) {
     await update(ref(db), updates);
     const [mainCheck, mirrorCheck] = await Promise.all([get(ref(db, mainPath)), get(ref(db, mirrorPath))]);
     if(!mainCheck.exists() || !mirrorCheck.exists()) throw new Error('장부 이중 서버 저장 확인 실패');
+    window.appendAccountingChangeHistory({ action: old ? '장부 수정' : '장부 입력', target:'trans', targetId:id, before:compactTransForHistory(old), after:compactTransForHistory(item) });
     scheduleAutoRestorePoint(old ? '장부 수정 후' : '장부 입력 후');
 }
 
@@ -1770,6 +1875,7 @@ async function deleteTransItem(id) {
     updates[`${SAFETY_ROOT}/meta/lastWrite`] = { at:getKoreaTimestampISO(), type:'trans', id:id, action:'delete' };
     if(old) updates[`${SAFETY_ROOT}/archive/transItems/${id}/${stamp}`] = old;
     await update(ref(db), updates);
+    window.appendAccountingChangeHistory({ action:'장부 삭제', target:'trans', targetId:id, before:compactTransForHistory(old), detail: old ? `${old.date||''} ${old.cat||''} ${Number(old.amt||0).toLocaleString()}원 ${old.desc||''}`.trim() : `ID ${id}` });
     scheduleAutoRestorePoint('장부 삭제 후');
 }
 
@@ -1791,6 +1897,7 @@ async function persistReceiptItem(item) {
     if(!mainCheck.exists() || !mainCheck.val().img || !mirrorCheck.exists() || !mirrorCheck.val().img) {
         throw new Error('영수증 이중 서버 저장 확인 실패');
     }
+    window.appendAccountingChangeHistory({ action: old ? '영수증 수정' : '영수증 등록', target:'receipt', targetId:id, before:compactReceiptForHistory(old), after:compactReceiptForHistory(item) });
     scheduleAutoRestorePoint(old ? '영수증 수정 후' : '영수증 등록 후');
 }
 
@@ -1807,6 +1914,7 @@ async function deleteReceiptItem(id) {
     updates[`${SAFETY_ROOT}/meta/lastWrite`] = { at:getKoreaTimestampISO(), type:'receipt', id:id, action:'delete' };
     if(old) updates[`${SAFETY_ROOT}/archive/receiptItems/${id}/${stamp}`] = old;
     await update(ref(db), updates);
+    window.appendAccountingChangeHistory({ action:'영수증 삭제', target:'receipt', targetId:id, before:compactReceiptForHistory(old), detail: old ? `${old.date||''} ${old.desc||''}`.trim() : `ID ${id}` });
     scheduleAutoRestorePoint('영수증 삭제 후');
 }
 
@@ -2311,6 +2419,7 @@ window.addTrans = async () => {
         const amt = parseInt(document.getElementById('tAmt').value);
         const desc = document.getElementById('tDesc').value.trim();
         if(!date || !amt) return alert('금액 입력하세요.');
+        if(!(await window.ensureAccountingMonthEditable(date, '장부 입력'))) return;
 
         if (!confirmPossibleDuplicate({ date, type, cat, amt, desc })) return;
 
@@ -4347,10 +4456,11 @@ window.handleLinkedReceiptFile = async (input) => {
     }
 };
 
-window.openLinkedReceiptModal = (transId) => {
+window.openLinkedReceiptModal = async (transId) => {
     if(!window.isAdmin) return alert('관리자만 영수증을 등록할 수 있습니다.');
     const t = window.trans.find(x => String(x.id) === String(transId));
     if(!t || t.type !== 'expense') return alert('지출 내역을 찾을 수 없습니다.');
+    if(!(await window.ensureAccountingMonthEditable(t.date, '영수증 등록'))) return;
     const existing = getReceiptForTransaction(transId);
     if(existing) return viewLinkedReceipt(transId);
     document.getElementById('linkedReceiptTransId').value = t.id;
@@ -4615,6 +4725,10 @@ window.uploadReceipt = async () => {
         const fileInput = document.getElementById('editReceiptFile');
 
         if(!newDate) return alert("날짜를 입력해주세요.");
+        const linkedT = window.trans.find(t => String(t.id) === String(r.transactionId || '') || String(t.receiptId || '') === String(r.id));
+        const lockDate = linkedT ? linkedT.date : r.date;
+        if(window.isAccountingMonthLockedSync && window.isAccountingMonthLockedSync(lockDate)) return alert('🔒 마감된 월의 영수증은 수정할 수 없습니다. 월말점검에서 먼저 마감 해제해 주세요.');
+        if(newDate !== r.date && window.isAccountingMonthLockedSync && window.isAccountingMonthLockedSync(newDate)) return alert('🔒 마감된 월로 영수증 날짜를 변경할 수 없습니다.');
 
         // 이미지 변경이 있는지 확인
         if (fileInput.files && fileInput.files[0]) {
@@ -4663,6 +4777,8 @@ window.uploadReceipt = async () => {
         if(!confirm('이 영수증을 정말 삭제하시겠습니까? 장부의 영수증 연결 표시도 해제됩니다.')) return;
         const r = window.receipts.find(x => String(x.id) === String(id));
         const linkedTrans = r ? window.trans.find(t => String(t.id) === String(r.transactionId || '') || String(t.receiptId || '') === String(id)) : null;
+        const lockDate = linkedTrans ? linkedTrans.date : (r ? r.date : '');
+        if(lockDate && !(await window.ensureAccountingMonthEditable(lockDate, '영수증 삭제'))) return;
         try {
             window.receipts = window.receipts.filter(x => String(x.id) !== String(id));
             await deleteReceiptItem(id);
@@ -4943,8 +5059,11 @@ window.uploadReceipt = async () => {
     window.saveTransEdit = async () => { 
         const id = Number(document.getElementById('editTransId').value); const t = window.trans.find(x => x.id === id); 
         if(t) {
+            const newDate = document.getElementById('editTransDate').value;
+            if(!(await window.ensureAccountingMonthEditable(t.date, '장부 수정'))) return;
+            if(newDate !== t.date && !(await window.ensureAccountingMonthEditable(newDate, '장부 이동'))) return;
             await createRestorePoint('장부 수정 전', true);
-            t.date = document.getElementById('editTransDate').value;
+            t.date = newDate;
             t.type = document.getElementById('editTransType').value;
             t.cat = document.getElementById('editTransCat').value;
             t.amt = parseInt(document.getElementById('editTransAmt').value);
@@ -4960,11 +5079,22 @@ window.uploadReceipt = async () => {
             closeTransModal();
         }
     }
-    window.delTransFromModal = async () => { if(confirm('삭제하시겠습니까?')){ const id = Number(document.getElementById('editTransId').value); await createRestorePoint('장부 삭제 전', true); window.trans = window.trans.filter(x => x.id !== id); try { await deleteTransItem(id); } catch(e) { return alert('삭제 저장 실패: ' + e.message); } renderAll(); closeTransModal(); } }
+    window.delTransFromModal = async () => {
+        if(!confirm('삭제하시겠습니까?')) return;
+        const id = Number(document.getElementById('editTransId').value);
+        const target = window.trans.find(x => x.id === id);
+        if(target && !(await window.ensureAccountingMonthEditable(target.date, '장부 삭제'))) return;
+        await createRestorePoint('장부 삭제 전', true);
+        window.trans = window.trans.filter(x => x.id !== id);
+        try { await deleteTransItem(id); } catch(e) { return alert('삭제 저장 실패: ' + e.message); }
+        renderAll(); closeTransModal();
+    }
 // 리스트에서 쓰레기통 아이콘 클릭 시 즉시 삭제하는 함수 (추가 위치)
     window.deleteTransDirect = async (id) => {
         if(!window.isAdmin) return alert('관리자 로그인이 필요합니다.');
         if(confirm('이 내역을 정말 삭제하시겠습니까?')) {
+            const target = window.trans.find(x => String(x.id) === String(id));
+            if(target && !(await window.ensureAccountingMonthEditable(target.date, '장부 삭제'))) return;
             await createRestorePoint('장부 삭제 전', true);
             // 선택한 ID만 제외하고 데이터 배열을 다시 만듭니다
             window.trans = window.trans.filter(x => x.id !== id);
@@ -5129,8 +5259,9 @@ window.uploadReceipt = async () => {
 
 
 // 2026-09-23 8단계: 월말점검 바로수정/영수증 연결
-window.openMonthEndCheck = () => {
+window.openMonthEndCheck = async () => {
     if(!window.isAdmin) return alert('관리자만 사용할 수 있습니다.');
+    if(window.refreshAccountingGovernance) await window.refreshAccountingGovernance();
     const modal = document.getElementById('monthEndCheckModal');
     const ySel = document.getElementById('monthEndYear');
     const mSel = document.getElementById('monthEndMonth');
@@ -5233,6 +5364,10 @@ window.runMonthEndCheck = () => {
             ${issueIds.size ? `⚠️ 확인이 필요한 장부 ${issueIds.size}건` : '✅ 현재 점검 항목에서 이상이 없습니다.'}
             <div style="font-size:.72rem;font-weight:500;color:#636e72;margin-top:4px;">${y}년 ${Number(m)}월 · 전체 ${rows.length}건 · 수입 ${totalInc.toLocaleString()}원 · 지출 ${totalExp.toLocaleString()}원</div>
         </div>
+        <div class="month-lock-bar">
+            <span class="month-lock-state ${window.isAccountingMonthLockedSync && window.isAccountingMonthLockedSync(prefix) ? 'locked' : 'open'}">${window.isAccountingMonthLockedSync && window.isAccountingMonthLockedSync(prefix) ? '🔒 마감 잠금됨' : '🟢 수정 가능'}</span>
+            <button class="month-lock-btn ${window.isAccountingMonthLockedSync && window.isAccountingMonthLockedSync(prefix) ? 'unlock' : 'lock'}" onclick="toggleMonthEndLock()">${window.isAccountingMonthLockedSync && window.isAccountingMonthLockedSync(prefix) ? '🔓 마감 해제' : '🔒 이 달 마감'}</button>
+        </div>
         <div class="month-end-summary">
             <div class="month-end-stat">🧾 영수증 미등록<b>${receiptMissing.length}</b></div>
             <div class="month-end-stat">⚠️ 중복 의심<b>${dupRows.length}</b></div>
@@ -5282,8 +5417,65 @@ window.jumpToMonthEndLedger = (id) => {
     setTimeout(()=>document.getElementById('ledgerSearch')?.scrollIntoView({behavior:'smooth',block:'center'}),50);
 };
 
+
+// 2026-09-23 10단계: 월 마감 잠금 + 변경 이력 UI
+window.openChangeHistory = async () => {
+    if(!window.isAdmin) return alert('관리자만 사용할 수 있습니다.');
+    const modal=document.getElementById('changeHistoryModal');
+    const box=document.getElementById('changeHistoryList');
+    if(!modal || !box) return;
+    modal.style.display='flex';
+    box.innerHTML='<div style="padding:18px;text-align:center;color:#999;">불러오는 중...</div>';
+    const rows = await (window.getAccountingChangeHistory ? window.getAccountingChangeHistory() : []);
+    if(!rows.length){ box.innerHTML='<div style="padding:18px;text-align:center;color:#999;">저장된 변경 이력이 없습니다.</div>'; return; }
+    const esc = window.escapeHtmlText || (v=>String(v??''));
+    const actionIcon = a => String(a||'').includes('삭제')?'🗑️':String(a||'').includes('마감')?'🔒':String(a||'').includes('영수증')?'🧾':'✏️';
+    box.innerHTML = rows.slice(0,100).map(r=>{
+        const before = r.before ? `${r.before.date||''} ${r.before.cat||''} ${Number(r.before.amt||0).toLocaleString()}원 ${r.before.desc||''}`.trim() : '';
+        const after = r.after ? `${r.after.date||''} ${r.after.cat||''} ${Number(r.after.amt||0).toLocaleString()}원 ${r.after.desc||''}`.trim() : '';
+        const detail = r.detail || (before && after ? `${before} → ${after}` : after || before || r.month || '');
+        return `<div class="change-history-row"><div class="change-history-head"><span>${actionIcon(r.action)} ${esc(r.action||'변경')}</span><span>${esc(String(r.at||'').replace('T',' ').slice(0,19))}</span></div><div class="change-history-sub">${esc(detail)}${r.user?`<br>관리자: ${esc(r.user)}`:''}</div></div>`;
+    }).join('');
+};
+window.closeChangeHistory = () => { const m=document.getElementById('changeHistoryModal'); if(m)m.style.display='none'; };
+
+window.toggleMonthEndLock = async () => {
+    if(!window.isAdmin) return alert('관리자만 사용할 수 있습니다.');
+    const y=document.getElementById('monthEndYear')?.value;
+    const m=document.getElementById('monthEndMonth')?.value;
+    if(!y||!m) return;
+    const key=`${y}-${m}`;
+    const locked=!!(window.accountingMonthLocks && window.accountingMonthLocks[key]);
+    const rows=(window.trans||[]).filter(t=>String(t.date||'').startsWith(key));
+    if(!locked) {
+        const receiptMissing=rows.filter(t=>t.type==='expense'&&!window.getReceiptForTransaction(t.id));
+        const emptyDesc=rows.filter(t=>!String(t.desc||'').trim());
+        const invalidAmount=rows.filter(t=>!Number(t.amt||0)||Number(t.amt||0)<0);
+        const dupRows=monthEndDuplicateRecords(rows);
+        const issueIds=new Set([...receiptMissing.map(x=>String(x.id)),...emptyDesc.map(x=>String(x.id)),...invalidAmount.map(x=>String(x.id)),...dupRows.map(x=>String(x.t.id))]);
+        if(issueIds.size) return alert(`⚠️ 아직 확인이 필요한 장부가 ${issueIds.size}건 있습니다.\n월말점검 문제를 먼저 처리한 뒤 마감해 주세요.`);
+        if(!confirm(`${y}년 ${Number(m)}월 장부를 마감 잠금하시겠습니까?\n마감 후에는 장부 입력·수정·삭제가 차단됩니다.`)) return;
+        await window.setAccountingMonthLock(key,true,{count:rows.length});
+    } else {
+        if(!confirm(`${y}년 ${Number(m)}월 마감을 해제하시겠습니까?\n해제 후 장부 수정·삭제가 다시 가능합니다.`)) return;
+        await window.setAccountingMonthLock(key,false,{count:rows.length});
+    }
+    window.runMonthEndCheck();
+};
+
 </script>
 
+
+
+
+<div class="modal-wrap" id="changeHistoryModal" onclick="if(event.target===this) closeChangeHistory()">
+    <div class="modal" style="max-width:520px;">
+        <button class="modal-close-x" onclick="closeChangeHistory()">×</button>
+        <div style="font-size:1.2rem;font-weight:900;margin-bottom:4px;">🕘 최근 변경 이력</div>
+        <div style="font-size:.76rem;color:#636e72;line-height:1.45;margin-bottom:12px;">관리자 장부·영수증 변경과 월 마감/해제 기록을 최근 100건까지 자동 보관합니다.</div>
+        <div id="changeHistoryList" class="change-history-list"><div style="padding:18px;text-align:center;color:#999;">불러오는 중...</div></div>
+    </div>
+</div>
 
 <div class="modal-wrap month-end-check-modal" id="monthEndCheckModal" onclick="if(event.target===this) closeMonthEndCheck()">
     <div class="modal">
