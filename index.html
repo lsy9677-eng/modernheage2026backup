@@ -2539,18 +2539,85 @@ function duplicateTextScore(a, b) {
 window.normalizeDuplicateText = normalizeDuplicateText;
 window.duplicateTextScore = duplicateTextScore;
 
+function duplicateMemberIdentity(trans) {
+    if (!trans) return '';
+    const mid = String(trans.memberId || '').trim();
+    if (mid) return `id:${mid}`;
+    const snap = normalizeDuplicateText(trans.memberNameSnapshot || '');
+    if (snap) return `name:${snap}`;
+    try {
+        const member = typeof findMemberFromDesc === 'function' ? findMemberFromDesc(String(trans.desc || '')) : null;
+        if (member) {
+            const id = String(member.id ?? '').trim();
+            if (id) return `id:${id}`;
+            const name = normalizeDuplicateText(member.name || '');
+            if (name) return `name:${name}`;
+        }
+    } catch (_) {}
+    return '';
+}
+
+function duplicateDuesMonths(desc) {
+    const text = String(desc || '');
+    const months = new Set();
+    const range = text.match(/(\d{1,2})\s*[~-]\s*(\d{1,2})\s*월/);
+    if (range) {
+        const a = Number(range[1]), b = Number(range[2]);
+        if (a >= 1 && b <= 12 && a <= b) for (let m=a; m<=b; m++) months.add(m);
+    }
+    for (const m of text.matchAll(/(\d{1,2})\s*월/g)) {
+        const n = Number(m[1]);
+        if (n >= 1 && n <= 12) months.add(n);
+    }
+    return months;
+}
+
+function areLikelyDuplicateTrans(a, b) {
+    if (!a || !b) return false;
+    if (String(a.date || '') !== String(b.date || '')) return false;
+    if (String(a.type || '') !== String(b.type || '')) return false;
+    if (Number(a.amt || 0) !== Number(b.amt || 0)) return false;
+
+    const catA = String(a.cat || '');
+    const catB = String(b.cat || '');
+    const sameCat = catA === catB;
+    const exactDesc = normalizeDuplicateText(a.desc) === normalizeDuplicateText(b.desc);
+    const score = duplicateTextScore(a.desc, b.desc);
+
+    // 회원별 회비/가입비/찬조금은 이름 일부가 비슷하다는 이유만으로 중복 처리하지 않는다.
+    // 반드시 같은 회원으로 확인된 경우에만 비교한다.
+    const memberCats = new Set(['월회비','가입비','찬조금']);
+    const memberSpecific = String(a.type || '') === 'income' && sameCat && memberCats.has(catA);
+    if (memberSpecific) {
+        const ma = duplicateMemberIdentity(a);
+        const mb = duplicateMemberIdentity(b);
+        if (!ma || !mb || ma !== mb) return false;
+
+        if (catA === '월회비') {
+            const am = duplicateDuesMonths(a.desc);
+            const bm = duplicateDuesMonths(b.desc);
+            if (am.size && bm.size) {
+                for (const m of am) if (bm.has(m)) return true;
+                return false;
+            }
+            // 월 표기가 없으면 같은 회원 + 내용 완전일치일 때만 경고
+            return exactDesc;
+        }
+        if (catA === '가입비') return true;
+        // 찬조금은 같은 회원이라도 서로 다른 찬조일 수 있으므로 내용 완전일치만 경고
+        return exactDesc;
+    }
+
+    // 일반 장부는 기존보다 기준을 엄격하게 해 비슷한 단어만 겹치는 오탐을 줄인다.
+    return exactDesc || score >= 0.78 || (sameCat && score >= 0.70);
+}
+window.areLikelyDuplicateTrans = areLikelyDuplicateTrans;
+
 function findPossibleDuplicateTrans(candidate) {
     const rows = Array.isArray(window.trans) ? window.trans : [];
     return rows
-        .filter(t => t && String(t.date || '') === String(candidate.date || ''))
-        .filter(t => String(t.type || '') === String(candidate.type || ''))
-        .filter(t => Number(t.amt || 0) === Number(candidate.amt || 0))
+        .filter(t => areLikelyDuplicateTrans(t, candidate))
         .map(t => ({ ...t, _dupScore: duplicateTextScore(t.desc, candidate.desc) }))
-        .filter(t => {
-            const sameCat = String(t.cat || '') === String(candidate.cat || '');
-            const exactDesc = normalizeDuplicateText(t.desc) === normalizeDuplicateText(candidate.desc);
-            return exactDesc || t._dupScore >= 0.64 || (sameCat && t._dupScore >= 0.5);
-        })
         .sort((a,b) => b._dupScore - a._dupScore || Number(b.id||0)-Number(a.id||0))
         .slice(0, 3);
 }
@@ -5708,9 +5775,7 @@ function monthEndDuplicateRecords(rows) {
             if(String(a.date||'') !== String(b.date||'')) continue;
             if(String(a.type||'') !== String(b.type||'')) continue;
             if(Number(a.amt||0) !== Number(b.amt||0)) continue;
-            const score = window.duplicateTextScore(a.desc,b.desc);
-            const sameCat = String(a.cat||'') === String(b.cat||'');
-            if(score >= .64 || (sameCat && score >= .5) || window.normalizeDuplicateText(a.desc) === window.normalizeDuplicateText(b.desc)) {
+            if(window.areLikelyDuplicateTrans(a,b)) {
                 suspects.set(String(a.id), {t:a, note:`중복 의심: ${b.desc || '(내용없음)'}`});
                 suspects.set(String(b.id), {t:b, note:`중복 의심: ${a.desc || '(내용없음)'}`});
             }
