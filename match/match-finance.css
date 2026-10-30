@@ -223,3 +223,10 @@
         *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
     }
 }
+/* Keep tournament context visible in the report, printed PDF and image export. */
+#mvpFullContent .mvp-sub-log { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #e5ebf4; break-inside: avoid; }
+#mvpFullContent .mvp-sub-log:last-child { border-bottom: 0; }
+#mvpFullContent .mvp-log-description { min-width: 0; overflow-wrap: anywhere; }
+#mvpFullContent .mvp-log-event { color: #334155; font-size: .82em; font-weight: 700; margin-bottom: 3px; }
+#mvpFullContent .mvp-log-reason { color: #0f172a; line-height: 1.5; }
+#mvpFullContent .mvp-log-points { flex-shrink: 0; white-space: nowrap; font-weight: 700; }

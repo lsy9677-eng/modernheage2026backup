@@ -5257,17 +5257,21 @@ window.calculateMVP = function(targetYear) {
                         </thead>
                         <tbody>`;
         
+        const reportText = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
         list.forEach((item, idx) => {
             let details = item.logs.map(l => 
                 `<div class="mvp-sub-log">
-                    <span>- ${l.reason}</span>
-                    <span style="font-weight:bold; color:${l.pts>=0?'blue':'red'}">${l.pts>0?'+':''}${l.pts}</span>
+                    <div class="mvp-log-description">
+                        <div class="mvp-log-event">${reportText(String(l.date ?? '').trim() || '대회·날짜 미등록')}</div>
+                        <div class="mvp-log-reason">${reportText(l.reason)}</div>
+                    </div>
+                    <span class="mvp-log-points" style="color:${l.pts>=0?'#2563eb':'#d32f2f'}">${l.pts>0?'+':''}${l.pts}점</span>
                  </div>`
             ).join('');
             
             html += `<tr>
                         <td style="text-align:center; font-weight:bold;">${idx+1}</td>
-                        <td style="text-align:center; font-weight:bold;">${item.name}</td>
+                        <td style="text-align:center; font-weight:bold;">${reportText(item.name)}</td>
                         <td style="text-align:center; font-weight:bold; color:#d32f2f; font-size:1.1rem;">${item.total}</td>
                         <td>${details}</td>
                      </tr>`;
@@ -6833,6 +6837,6 @@ window.editPlayerInMatch = (matchId, teamNum, pIdx, newName) => {
 })();
 </script>
 
-<link rel="stylesheet" href="./match-finance.css?v=20261030_02">
+<link rel="stylesheet" href="./match-finance.css?v=20261030_03">
 </body>
 </html>
