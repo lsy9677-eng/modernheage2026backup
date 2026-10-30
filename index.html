@@ -683,7 +683,7 @@ th:first-child, td:first-child {
 
 </style>
     <meta name="theme-color" content="#172e52">
-    <link rel="stylesheet" href="./finance.css?v=20261030_01">
+    <link rel="stylesheet" href="./finance.css?v=20261030_02">
 </head>
 <body>
 
@@ -702,13 +702,7 @@ th:first-child, td:first-child {
             </div>
             
             <div class="backup-btns">
-    <button class="btn-backup admin-only" onclick="changeAdminPassword()">🔑PW변경</button>
-    <button class="btn-backup admin-only" onclick="exportData()">💾 백업</button>
-    <button class="btn-backup admin-only" onclick="createSafetyBaseline()">🛡️안전복사</button>
-
-    <button class="btn-backup admin-only" onclick="document.getElementById('loadFile').click()">📂 복구</button>
-    <button class="btn-save-exit admin-only" onclick="saveAndExit()">저장하고 나가기 🚪</button>
-    <button id="btnLogin" class="admin-login-btn" aria-label="관리자 로그인 또는 로그아웃" title="관리자 로그인 또는 로그아웃" onclick="toggleAdminLogin()">🔒</button>
+    <button id="btnSettings" class="btn-sub settings-trigger" onclick="goTab('settings')" aria-label="계정 및 앱 설정"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-1 3-3 1-2 3 2 2-1 3 3 2 2-1 3 2 3-2 2-3-1-2 2-3-2-3-3-1-1-3Z"/><circle cx="12" cy="11" r="3"/></svg>설정</button>
     <input type="file" id="loadFile" accept=".json" style="display:none" onchange="importData(this)">
 </div>
         </div>
@@ -732,13 +726,12 @@ th:first-child, td:first-child {
         <div class="section-header">
             <div class="section-title"><span>거래 내역</span></div>
             <div style="display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-end;">
-                <button class="btn-sub admin-only" style="background:#e8fff8; color:#007f63; border:1px solid #a7ead8;" onclick="openRestorePointManager()">⏱ 자동복구점</button>
                 <button class="btn-sub admin-only" style="background:#fff7e6; color:#a75b00; border:1px solid #ffd59a;" onclick="openMonthEndCheck()">✅ 월말점검</button>
                 <button class="btn-sub admin-only" style="background:#f4efff; color:#6c5ce7; border:1px solid #d8ccff;" onclick="openChangeHistory()">🕘 변경이력</button>
                 <button class="btn-sub" style="background:#fff; color:var(--primary); border:1px solid var(--primary);" onclick="goTab('report')">📊 결산및 감사보고</button>
             </div>
         </div>
-        <div id="backupHealthBar" class="backup-health-bar admin-only warn" onclick="openRestorePointManager()" title="자동 복구점 상태를 확인합니다.">
+        <div id="backupHealthBar" class="backup-health-bar owner-only warn" onclick="openRestorePointManager()" title="자동 복구점 상태를 확인합니다.">
             <div>
                 <div class="bh-main" id="backupHealthMain">🛡 보호상태 확인 중...</div>
                 <div class="bh-sub" id="backupHealthSub">최근 자동 복구점 정보를 불러오는 중입니다.</div>
@@ -1386,9 +1379,10 @@ th:first-child, td:first-child {
 </div>
 
 <script type="module">
+    import { installAccountAccess } from './account-access.js?v=20261030_01';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, set, get, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
    const firebaseConfig = {
   apiKey: "AIzaSyA3m3yVAGDsG_O-joG2TXAVn8akJJA_Q1s",
   authDomain: "modern-account-2026.firebaseapp.com",
@@ -1885,6 +1879,7 @@ async function recoverReceiptForPoint(id, pointTime) {
 }
 
 window.openRestorePointManager = async () => {
+    if(!window.isOwner) return alert('전체 백업과 복구점 관리는 관리자만 할 수 있습니다.');
     if(!window.isAdmin) return alert('관리자 로그인이 필요합니다.');
     document.getElementById('restorePointModal').style.display='flex';
     await renderRestorePointList();
@@ -1892,6 +1887,7 @@ window.openRestorePointManager = async () => {
 window.closeRestorePointManager = () => { document.getElementById('restorePointModal').style.display='none'; };
 
 window.createManualRestorePoint = async () => {
+    if(!window.isOwner) return alert('전체 백업과 복구점 관리는 관리자만 할 수 있습니다.');
     if(!window.isAdmin) return alert('관리자 로그인이 필요합니다.');
     const status=document.getElementById('restorePointStatus');
     if(status) status.textContent='복구점 저장 중...';
@@ -1929,6 +1925,7 @@ async function renderRestorePointList() {
 }
 
 window.restoreFromPoint = async (pointId) => {
+    if(!window.isOwner) return alert('전체 백업과 복구점 관리는 관리자만 할 수 있습니다.');
     if(!window.isAdmin) return alert('관리자 로그인이 필요합니다.');
     if(!confirm('선택한 시점으로 장부·회비·회원·일정·설정을 되돌립니다.\n현재 상태는 복원 직전 긴급 복구점으로 먼저 저장합니다. 계속하시겠습니까?')) return;
     document.getElementById('loadingMsg').innerText='복원 준비 중...';
@@ -1983,7 +1980,8 @@ window.restoreFromPoint = async (pointId) => {
 
         updates[`${CLUB_ROOT}/members_acc`]=point.members_acc||[];
         updates[`${CLUB_ROOT}/events`]=point.events||[];
-        updates[`${CLUB_ROOT}/settings`]=point.settings||{};
+        const restoredSettings = { ...(point.settings||{}) }; delete restoredSettings.adminPwd;
+        updates[`${CLUB_ROOT}/settings`]=restoredSettings;
         if(point.auditState) updates[`${CLUB_ROOT}/auditState`]=point.auditState;
         updates[`${SAFETY_ROOT}/meta/lastRestore`]={at:getKoreaTimestampISO(), pointId, sourceAt:point.createdAtText||''};
         await update(ref(db), updates);
@@ -2075,6 +2073,7 @@ async function deleteReceiptItem(id) {
 }
 
 window.createSafetyBaseline = async () => {
+    if(!window.isOwner) return alert('전체 백업과 복구점 관리는 관리자만 할 수 있습니다.');
     if(!window.isAdmin) return alert('관리자 로그인이 필요합니다.');
     if(!confirm('현재 장부와 영수증을 clubData 밖의 별도 안전영역에 복사합니다.\n기존 안전복사본은 지우지 않습니다. 계속하시겠습니까?')) return;
     document.getElementById('loadingMsg').innerText = '안전 복사본 생성 중...';
@@ -2106,8 +2105,9 @@ window.createSafetyBaseline = async () => {
 };
 
 function saveToFirebase() {
-    if(!window.isAdmin && !window.isAuditMode && window.trans.length > 0) return Promise.resolve();
+    if(!window.isAdmin || !auth.currentUser) return Promise.reject(new Error('승인된 관리자 또는 총무 로그인이 필요합니다.'));
     cacheCurrentData();
+    if(window.settings) delete window.settings.adminPwd;
     let updates = {};
     updates[CLUB_ROOT + '/members_acc'] = window.members;
     updates[CLUB_ROOT + '/events'] = window.events;
@@ -2143,83 +2143,21 @@ window.saveAndExit = () => {
 
     // --- 관리자/인증 ---
 // --- [수정됨] 진짜 관리자 로그인/로그아웃 ---
-    window.toggleAdminLogin = () => {
-        if(window.isAdmin) {
-            if(confirm('로그아웃 하시겠습니까?')) {
-                signOut(auth).then(() => {
-                    alert('로그아웃 되었습니다.');
-                    // UI는 onAuthStateChanged에서 자동 업데이트됨
-                }).catch((error) => {
-                    alert('로그아웃 실패: ' + error.message);
-                });
-            }
-        } else {
-            // 더 이상 prompt('1234')가 아님!
-            const email = prompt('관리자 이메일을 입력하세요:');
-            if(!email) return;
-            const password = prompt('비밀번호를 입력하세요:');
-            if(!password) return;
-
-            signInWithEmailAndPassword(auth, email, password)
-                .then((userCredential) => {
-                    alert('관리자 모드로 로그인되었습니다.');
-                })
-                .catch((error) => {
-                    alert('로그인 실패: 이메일이나 비밀번호를 확인하세요.\n' + error.message);
-                });
-        }
-    }
-
-    // ▼▼▼ [추가] 로그인 상태 감지 리스너 (새로고침 해도 유지됨) ▼▼▼
-    onAuthStateChanged(auth, (user) => {
-        if (user) {
-            // 로그인 성공 시
-            window.isAdmin = true;
-            // 여기서 UID 체크를 한 번 더 해도 좋지만, DB 규칙이 이미 막고 있음
-            console.log("관리자 접속:", user.email);
-            const prevAuto = Number(localStorage.getItem('modernAccountLastRestorePointAt') || 0);
-            lastAutoRestoreAt = prevAuto;
-            setTimeout(() => createRestorePoint('관리자 접속 자동 복구점', false), 1200);
-        } else {
-            // 로그아웃 시
-            window.isAdmin = false;
-        }
-        updateAdminUI(); // 화면 갱신
-        if(window.isAdmin) setTimeout(() => window.refreshRestoreHealth(true), 250);
-    });
-    
-    window.changeAdminPassword = () => {
-        if(!window.isAdmin) return;
-        const newPw = prompt("새로운 비밀번호를 입력하세요:");
-        if(newPw && newPw.trim() !== "") {
-            const confirmPw = prompt("비밀번호 확인을 위해 한 번 더 입력하세요:");
-            if(newPw === confirmPw) {
-                if(!window.settings) window.settings = {};
-                window.settings.adminPwd = newPw;
-                saveToFirebase();
-                alert("비밀번호가 변경되었습니다.");
-            } else alert("비밀번호가 일치하지 않습니다.");
-        }
-    }
-
     function updateAdminUI() {
-        const btn = document.getElementById('btnLogin');
-        const adminEls = document.querySelectorAll('.admin-only');
-        const adminFlexEls = document.querySelectorAll('.admin-flex');
-        
-        if(window.isAdmin) {
-            btn.classList.add('logged-in'); btn.innerHTML = '🔓';
-            adminEls.forEach(el => el.style.setProperty('display', 'block', 'important'));
-            adminFlexEls.forEach(el => el.style.setProperty('display', 'flex', 'important'));
-            document.querySelector('.fab').style.display = 'flex';
-            document.querySelectorAll('.btn-backup').forEach(b => b.style.setProperty('display', 'block', 'important'));
-            document.querySelector('.btn-save-exit').style.setProperty('display', 'flex', 'important');
-        } else {
-            btn.classList.remove('logged-in'); btn.innerHTML = '🔒';
-            adminEls.forEach(el => el.style.setProperty('display', 'none', 'important'));
-            adminFlexEls.forEach(el => el.style.setProperty('display', 'none', 'important'));
-        }
+        document.querySelectorAll('.admin-only').forEach(el => el.style.setProperty('display', window.isAdmin ? 'block' : 'none', 'important'));
+        document.querySelectorAll('.admin-flex').forEach(el => el.style.setProperty('display', window.isAdmin ? 'flex' : 'none', 'important'));
+        document.querySelectorAll('.owner-only').forEach(el => el.style.setProperty('display', window.isOwner ? 'block' : 'none', 'important'));
+        document.querySelector('.fab').style.setProperty('display', window.isAdmin ? 'flex' : 'none', 'important');
+        if(typeof window.renderAccessSettings === 'function') window.renderAccessSettings();
     }
+
+    installAccountAccess({ auth, db, refreshUI: () => {
+        if(typeof window.renderAll === 'function') window.renderAll(); else updateAdminUI();
+    }, onManagerReady: () => {
+        lastAutoRestoreAt = Number(localStorage.getItem('modernAccountLastRestorePointAt') || 0);
+        setTimeout(() => { if(window.isAdmin) createRestorePoint('Account login', false); }, 1200);
+        setTimeout(() => { if(window.isAdmin) window.refreshRestoreHealth(true); }, 250);
+    }});
 
     function formatShort(amount) {
         if (!amount || amount === 0) return '-';
@@ -4520,10 +4458,9 @@ function initReportYears() {
     }
 
     window.unlockAuditMode = () => {
-        const pwd = prompt('감사(관리자) 비밀번호를 입력하세요:');
-        const currentPw = (window.settings && window.settings.adminPwd) ? window.settings.adminPwd : '1234';
-        if(pwd === currentPw) { alert("인증되었습니다."); window.isAuditMode = true; enableAuditInputs(); } 
-        else if (pwd !== null) alert("비밀번호가 틀렸습니다.");
+        if(!window.isAdmin || !auth.currentUser) return alert('관리자 또는 승인된 총무로 로그인해주세요.');
+        window.isAuditMode = true;
+        enableAuditInputs();
     }
 
     function enableAuditInputs() {
@@ -4557,15 +4494,22 @@ function initReportYears() {
     function endDraw() { isDrawing = false; ctx.beginPath(); }
 
     window.clearSignature = () => { if(!window.isAuditMode) return; ctx.clearRect(0, 0, canvas.width, canvas.height); }
-    window.saveAuditData = () => {
-        if(!window.isAuditMode) return;
+    window.saveAuditData = async () => {
+        if(!window.isAuditMode || !window.isAdmin || !auth.currentUser) return;
         const checked = document.getElementById('auditCheckReceipt').checked;
         const name = document.getElementById('auditNameInput').value;
         const sig = canvas.toDataURL(); 
         if(!checked) return alert("영수증 확인 항목에 체크해주세요.");
         if(!name) return alert("감사 이름을 입력해주세요.");
+        const previous = window.auditState;
         window.auditState = { checked, name, sig, date: getKoreaTimestampISO() };
-        saveToFirebase(); alert("승인 완료."); disableAuditInputs(); window.isAuditMode = false;
+        try {
+            await saveToFirebase();
+            alert("승인 완료."); disableAuditInputs(); window.isAuditMode = false;
+        } catch(error) {
+            window.auditState = previous;
+            alert('승인 저장 실패: 권한과 인터넷 연결을 확인해주세요.');
+        }
     }
     window.setUnpaidSort = (type) => {
         window.unpaidSort = type;
@@ -5423,6 +5367,7 @@ window.uploadReceipt = async () => {
     }
     
     window.goTab = (id, el) => { 
+        document.querySelector('.app-container').dataset.section = id;
         document.querySelectorAll('.page').forEach(p=>p.classList.remove('active')); 
         document.getElementById('page-'+id).classList.add('active'); 
         document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active')); 
@@ -5445,6 +5390,7 @@ window.uploadReceipt = async () => {
     window.renderAll = () => { renderLedger(); renderStats(); renderMembers(); renderUnpaid(); renderReceipts(); renderCalendar(); updateAdminUI(); if (typeof window.renderDynamicQuickRecommendations === 'function') window.renderDynamicQuickRecommendations(); }
     window.exportData = () => { const d={trans:window.trans, members:window.members, receipts:window.receipts, events:window.events, settings:window.settings}; const b=new Blob([JSON.stringify(d)],{type:'application/json'}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download='backup.json'; a.click(); }
     window.importData = (input) => {
+        if(!window.isOwner) { input.value=''; return alert('전체 복구는 관리자만 할 수 있습니다.'); }
         const f=input.files[0]; if(!f) return;
         if(!confirm('백업 파일을 현재 데이터에 안전하게 병합합니다.\n기존 장부/영수증은 삭제하지 않습니다. 계속하시겠습니까?')) { input.value=''; return; }
         const r=new FileReader();
@@ -5457,7 +5403,7 @@ window.uploadReceipt = async () => {
                 (d.receipts||[]).forEach(x=>{ if(x&&x.id!=null){ const id=String(x.id); updates[`${CLUB_ROOT}/receiptItems/${id}`]=x; updates[`${SAFETY_ROOT}/liveMirror/receiptItems/${id}`]=x; updates[`${CLUB_ROOT}/deletedReceipts/${id}`]=null; }});
                 if(Array.isArray(d.members)) updates[`${CLUB_ROOT}/members_acc`]=d.members;
                 if(Array.isArray(d.events)) updates[`${CLUB_ROOT}/events`]=d.events;
-                if(d.settings) updates[`${CLUB_ROOT}/settings`]=d.settings;
+                if(d.settings) { delete d.settings.adminPwd; updates[`${CLUB_ROOT}/settings`]=d.settings; }
                 updates[`${SAFETY_ROOT}/meta/lastImport`]={at:getKoreaTimestampISO(), file:f.name, stamp};
                 await update(ref(db), updates);
                 alert('✅ 안전 병합 복구 완료');

@@ -1,5 +1,25 @@
 /* Shared presentation layer. Accounting and report behavior stays in index.html. */
 @media screen {
+    [hidden] { display: none !important; }
+    .owner-only { display: none !important; }
+    .app-container[data-section="settings"] header .total-asset-box,
+    .app-container[data-section="settings"] header .stats-row,
+    .app-container[data-section="settings"] #bankInfoArea { display: none !important; }
+    .app-container[data-section="settings"] .header-top { margin-bottom: 0; }
+    .settings-trigger { display: inline-flex; align-items: center; gap: 7px; }
+    .settings-trigger svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
+    .settings-heading { font-size: 1rem; font-weight: 750; margin-bottom: 14px; }
+    .settings-description { font-size: .82rem; line-height: 1.65; color: #617089; overflow-wrap: anywhere; margin: 8px 0 14px; }
+    .settings-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .account-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: .85rem; overflow-wrap: anywhere; }
+    .account-role { background: #edf3ff; color: #2058c7; border-radius: 7px; padding: 5px 9px; font-weight: 650; font-size: .75rem; }
+    .access-message { margin-bottom: 18px; border-radius: 12px; padding: 14px 16px; background: #edf6ff; color: #2058a7; border: 1px solid #d4e5fb; font-size: .85rem; line-height: 1.6; }
+    .access-message.error { background: #fff2f3; color: #b13045; border-color: #f4d5da; }
+    #page-settings form label { display: block; font-size: .78rem; color: #52637d; margin: 12px 0 6px; }
+    #page-settings form { max-width: 520px; }
+    #page-settings button:disabled { cursor: wait; opacity: .55; }
+    .access-request-row { padding: 18px 0; border-bottom: 1px solid #e8edf4; }
+    .access-request-row:last-child { border-bottom: 0; }
     :root {
         --primary: #172b4d;
         --primary-grad: linear-gradient(110deg, #2463eb, #2463eb);

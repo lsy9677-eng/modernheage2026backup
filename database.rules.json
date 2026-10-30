@@ -1,56 +1,152 @@
 {
   "rules": {
-    ".read": true,
+    ".read": false,
     ".write": false,
-
     "clubData": {
-      "trans": { ".write": false },
-      "receipts": { ".write": false },
-      "members": { ".write": false },
-
+      ".read": true,
+      "trans": {
+        ".write": false
+      },
+      "receipts": {
+        ".write": false
+      },
+      "members": {
+        ".write": false
+      },
       "transItems": {
-        "$id": { ".write": "auth != null" }
+        "$id": {
+          ".write": "auth != null && ((auth != null && auth.token.email == 'canyone2@naver.com') || (auth.token.email_verified == true && root.child('accountAccess/roles').child(auth.uid).child('role').val() == 'treasurer' && root.child('accountAccess/roles').child(auth.uid).child('email').val() == auth.token.email))"
+        }
       },
       "receiptItems": {
-        "$id": { ".write": "auth != null" }
+        "$id": {
+          ".write": "auth != null && ((auth != null && auth.token.email == 'canyone2@naver.com') || (auth.token.email_verified == true && root.child('accountAccess/roles').child(auth.uid).child('role').val() == 'treasurer' && root.child('accountAccess/roles').child(auth.uid).child('email').val() == auth.token.email))"
+        }
       },
       "deletedTrans": {
-        "$id": { ".write": "auth != null" }
+        "$id": {
+          ".write": "auth != null && ((auth != null && auth.token.email == 'canyone2@naver.com') || (auth.token.email_verified == true && root.child('accountAccess/roles').child(auth.uid).child('role').val() == 'treasurer' && root.child('accountAccess/roles').child(auth.uid).child('email').val() == auth.token.email))"
+        }
       },
       "deletedReceipts": {
-        "$id": { ".write": "auth != null" }
+        "$id": {
+          ".write": "auth != null && ((auth != null && auth.token.email == 'canyone2@naver.com') || (auth.token.email_verified == true && root.child('accountAccess/roles').child(auth.uid).child('role').val() == 'treasurer' && root.child('accountAccess/roles').child(auth.uid).child('email').val() == auth.token.email))"
+        }
       },
-      "members_acc": { ".write": "auth != null" },
-      "events": { ".write": "auth != null" },
-      "settings": { ".write": "auth != null" },
-      "auditState": { ".write": "auth != null" }
+      "members_acc": {
+        ".write": "auth != null && ((auth != null && auth.token.email == 'canyone2@naver.com') || (auth.token.email_verified == true && root.child('accountAccess/roles').child(auth.uid).child('role').val() == 'treasurer' && root.child('accountAccess/roles').child(auth.uid).child('email').val() == auth.token.email))"
+      },
+      "events": {
+        ".write": "auth != null && ((auth != null && auth.token.email == 'canyone2@naver.com') || (auth.token.email_verified == true && root.child('accountAccess/roles').child(auth.uid).child('role').val() == 'treasurer' && root.child('accountAccess/roles').child(auth.uid).child('email').val() == auth.token.email))"
+      },
+      "settings": {
+        ".write": "auth != null && ((auth != null && auth.token.email == 'canyone2@naver.com') || (auth.token.email_verified == true && root.child('accountAccess/roles').child(auth.uid).child('role').val() == 'treasurer' && root.child('accountAccess/roles').child(auth.uid).child('email').val() == auth.token.email))",
+        ".validate": "!newData.hasChild('adminPwd')"
+      },
+      "auditState": {
+        ".write": "auth != null && ((auth != null && auth.token.email == 'canyone2@naver.com') || (auth.token.email_verified == true && root.child('accountAccess/roles').child(auth.uid).child('role').val() == 'treasurer' && root.child('accountAccess/roles').child(auth.uid).child('email').val() == auth.token.email))"
+      }
     },
-
     "accountingSafety": {
+      ".read": true,
       "liveMirror": {
         "transItems": {
-          "$id": { ".write": "auth != null" }
+          "$id": {
+            ".write": "auth != null && ((auth != null && auth.token.email == 'canyone2@naver.com') || (auth.token.email_verified == true && root.child('accountAccess/roles').child(auth.uid).child('role').val() == 'treasurer' && root.child('accountAccess/roles').child(auth.uid).child('email').val() == auth.token.email))"
+          }
         },
         "receiptItems": {
-          "$id": { ".write": "auth != null" }
+          "$id": {
+            ".write": "auth != null && ((auth != null && auth.token.email == 'canyone2@naver.com') || (auth.token.email_verified == true && root.child('accountAccess/roles').child(auth.uid).child('role').val() == 'treasurer' && root.child('accountAccess/roles').child(auth.uid).child('email').val() == auth.token.email))"
+          }
         }
       },
       "archive": {
         "transItems": {
           "$id": {
-            "$version": { ".write": "auth != null" }
+            "$version": {
+              ".write": "auth != null && ((auth != null && auth.token.email == 'canyone2@naver.com') || (auth.token.email_verified == true && root.child('accountAccess/roles').child(auth.uid).child('role').val() == 'treasurer' && root.child('accountAccess/roles').child(auth.uid).child('email').val() == auth.token.email))"
+            }
           }
         },
         "receiptItems": {
           "$id": {
-            "$version": { ".write": "auth != null" }
+            "$version": {
+              ".write": "auth != null && ((auth != null && auth.token.email == 'canyone2@naver.com') || (auth.token.email_verified == true && root.child('accountAccess/roles').child(auth.uid).child('role').val() == 'treasurer' && root.child('accountAccess/roles').child(auth.uid).child('email').val() == auth.token.email))"
+            }
           }
         }
       },
       "restorePoints": {
-        "$pointId": { ".write": "auth != null" }
+        "$pointId": {
+          ".write": "auth != null && ((auth != null && auth.token.email == 'canyone2@naver.com') || (auth.token.email_verified == true && root.child('accountAccess/roles').child(auth.uid).child('role').val() == 'treasurer' && root.child('accountAccess/roles').child(auth.uid).child('email').val() == auth.token.email))"
+        }
       },
-      "meta": { ".write": "auth != null" }
+      "meta": {
+        "$key": {
+          ".write": "(auth != null && ((auth != null && auth.token.email == 'canyone2@naver.com') || (auth.token.email_verified == true && root.child('accountAccess/roles').child(auth.uid).child('role').val() == 'treasurer' && root.child('accountAccess/roles').child(auth.uid).child('email').val() == auth.token.email))) && (($key != 'lastRestore' && $key != 'lastImport') || (auth != null && auth.token.email == 'canyone2@naver.com'))"
+        }
+      }
+    },
+    "accountAccess": {
+      "roles": {
+        ".read": "auth != null && auth.token.email == 'canyone2@naver.com'",
+        "$uid": {
+          ".read": "auth != null && auth.uid == $uid",
+          ".write": "auth != null && auth.token.email == 'canyone2@naver.com'",
+          ".validate": "newData.hasChildren(['role','email','name','grantedAt','grantedBy']) && newData.child('role').val() == 'treasurer' && newData.child('email').val() == root.child('accountAccess/requests').child($uid).child('email').val() && newData.child('grantedBy').val() == auth.uid",
+          "role": {
+            ".validate": "newData.val() == 'treasurer'"
+          },
+          "email": {
+            ".validate": "newData.isString() && newData.val().length <= 254"
+          },
+          "name": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 80"
+          },
+          "grantedAt": {
+            ".validate": "newData.isNumber() && newData.val() <= now"
+          },
+          "grantedBy": {
+            ".validate": "newData.val() == auth.uid"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      },
+      "requests": {
+        ".read": "auth != null && auth.token.email == 'canyone2@naver.com'",
+        "$uid": {
+          ".read": "auth != null && auth.uid == $uid",
+          ".write": "(auth != null && auth.token.email == 'canyone2@naver.com') || ((auth != null && auth.uid == $uid) && auth.token.email_verified == true && (!data.exists() || data.child('status').val() == 'rejected' || data.child('status').val() == 'revoked') && newData.child('status').val() == 'pending' && newData.child('email').val() == auth.token.email && !newData.hasChild('reviewedAt') && !newData.hasChild('reviewedBy'))",
+          ".validate": "newData.hasChildren(['uid','email','name','status','requestedAt']) && newData.child('uid').val() == $uid",
+          "uid": {
+            ".validate": "newData.val() == $uid"
+          },
+          "email": {
+            ".validate": "newData.isString() && newData.val().length <= 254 && ((auth != null && auth.token.email == 'canyone2@naver.com') || newData.val() == auth.token.email)"
+          },
+          "name": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 80"
+          },
+          "status": {
+            ".validate": "newData.val() == 'pending' || newData.val() == 'approved' || newData.val() == 'rejected' || newData.val() == 'revoked'"
+          },
+          "requestedAt": {
+            ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= now"
+          },
+          "reviewedAt": {
+            ".validate": "(auth != null && auth.token.email == 'canyone2@naver.com') && newData.isNumber() && newData.val() <= now"
+          },
+          "reviewedBy": {
+            ".validate": "(auth != null && auth.token.email == 'canyone2@naver.com') && newData.val() == auth.uid"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
     }
   }
 }

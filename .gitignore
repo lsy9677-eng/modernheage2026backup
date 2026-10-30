@@ -1,0 +1,4 @@
+.deployment-backups/
+.firebase/
+firebase-debug.log*
+ui-debug.log*
