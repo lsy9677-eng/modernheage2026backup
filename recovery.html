@@ -24,7 +24,8 @@ const $=id=>document.getElementById(id); const log=t=>{$('log').textContent=new 
 function arr(v){return Array.isArray(v)?v:Object.values(v||{})}
 function dl(name,obj){const b=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 function ids(a){return new Set((a||[]).filter(Boolean).map(x=>String(x.id)))}
-async function readServer(){const s=await get(ref(db,ROOT));return s.val()||{}}
+const SERVER_KEYS=['trans','receipts','transItems','receiptItems','deletedTrans','deletedReceipts','events','settings','auditState','membersPublic'];
+async function readServer(){const out={};await Promise.all(SERVER_KEYS.map(async k=>{const s=await get(ref(db,ROOT+'/'+k));if(s.exists())out[k]=s.val()}));try{const s=await get(ref(db,ROOT+'/members_acc'));if(s.exists())out.members_acc=s.val()}catch(e){}return out}
 function readLocal(){try{return JSON.parse(localStorage.getItem('modernAccountSafetyCacheV2')||'null')}catch(e){return null}}
 async function check(){
  state.local=readLocal(); state.server=await readServer();

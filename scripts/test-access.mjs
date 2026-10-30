@@ -1,118 +1,95 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import vm from 'node:vm';
 import { spawnSync } from 'node:child_process';
-import { OWNER_EMAIL, resolveRole, canManage, canRequest } from '../access-policy.js';
+import { OWNER_EMAIL, resolveRole, canManage, canManageMatch } from '../access-policy.js';
+import { privatizeMatchTree, findPhoneLikePaths, toPublicAccountMember, isPhoneValue } from '../member-privacy.js';
 
-const user = { uid: 'next', email: 'next@example.com', emailVerified: true };
-const grant = { role: 'treasurer', email: user.email };
+const user = { uid: 'next', email: 'next@example.com' };
 test('Only the designated owner receives owner permissions', () => {
     assert.equal(resolveRole({ email: OWNER_EMAIL }, null), 'owner');
     assert.equal(resolveRole(null, { role: 'owner' }), 'visitor');
     assert.equal(resolveRole(user, { role: 'owner', email: user.email }), 'pending');
 });
-test('Approval requires a matching email and verified account', () => {
-    assert.equal(resolveRole(user, grant), 'treasurer');
-    assert.equal(resolveRole({ ...user, emailVerified: false }, grant), 'pending');
-    assert.equal(resolveRole(user, { ...grant, email: 'other@example.com' }), 'pending');
+test('A role grant must match the signed-in email', () => {
+    assert.equal(resolveRole(user, { role: 'treasurer', email: user.email }), 'treasurer');
+    assert.equal(resolveRole(user, { role: 'director', email: user.email }), 'director');
+    assert.equal(resolveRole(user, { role: 'director', email: 'other@example.com' }), 'pending');
+    assert.equal(resolveRole(user, { role: 'revoked', email: user.email }), 'pending');
     assert.equal(resolveRole(user, null), 'pending');
 });
-test('Revoked and pending accounts cannot manage the ledger', () => {
-    for (const role of ['pending', 'visitor', 'revoked', null]) assert.equal(canManage(role), false);
-    assert.equal(canManage('owner'), true);
-    assert.equal(canManage('treasurer'), true);
+test('Treasurer manages accounting only, director manages the tournament only, owner manages both', () => {
+    assert.deepEqual([canManage('owner'), canManageMatch('owner')], [true, true]);
+    assert.deepEqual([canManage('treasurer'), canManageMatch('treasurer')], [true, false]);
+    assert.deepEqual([canManage('director'), canManageMatch('director')], [false, true]);
+    for (const role of ['pending', 'visitor', 'revoked', null]) assert.deepEqual([canManage(role), canManageMatch(role)], [false, false]);
 });
-test('Accounts can apply before verification without receiving edit rights', () => {
-    assert.equal(canRequest(user, null, 'pending'), true);
-    assert.equal(canRequest(user, {status: 'rejected'}, 'pending'), true);
-    assert.equal(canRequest(user, {status: 'revoked'}, 'pending'), true);
-    assert.equal(canRequest(user, {status: 'pending'}, 'pending'), false);
-    assert.equal(canRequest(user, {status: 'approved'}, 'treasurer'), false);
-    assert.equal(canRequest({...user, emailVerified:false}, null, 'pending'), true);
-    assert.equal(resolveRole({...user,emailVerified:false},grant),'pending');
-    assert.equal(canRequest(null,null,'pending'),false);
+test('Public accounting members exclude phone, spouse and birth year', () => {
+    const member = toPublicAccountMember({ id: 1, name: '가', phone: '010-1111-2222', spouse: '나', birthday: '1970-03-05', status: '정회원', role: '총무', paid: [true], joinDate: '2020-01-01' });
+    assert.deepEqual(member, { id: 1, name: '가', status: '정회원', role: '총무', joinDate: '2020-01-01', paid: [true], birthday: '0000-03-05' });
+    assert.equal(member.birthday.substring(5), '03-05');
 });
-
-// Exercise the actual rule expressions with DataSnapshot-shaped fixtures.
-// This checks policy decisions, not the Firebase rules compiler or emulator.
-const rules = JSON.parse(fs.readFileSync(new URL('../database.rules.json', import.meta.url))).rules;
-class Snapshot {
-    constructor(value) { this.value = value ?? null; }
-    val() { return this.value; }
-    child(path) { return new Snapshot(path.split('/').reduce((v, key) => v?.[key], this.value)); }
-    exists() { return this.value !== null; }
-    hasChild(key) { return this.child(key).exists(); }
-    hasChildren(keys) { return keys.every(key => this.hasChild(key)); }
-    isString() { return typeof this.value === 'string'; }
-    isNumber() { return typeof this.value === 'number'; }
-}
-const auth = { uid: user.uid, token: {email: user.email, email_verified: true} };
-const owner = { uid: 'owner', token: {email: OWNER_EMAIL} };
-const root = {accountAccess: {roles: {[user.uid]: grant}, requests: {[user.uid]: {email: user.email}}}};
-const evaluate = (expression, options = {}) => {
-    if (typeof expression === 'boolean') return expression;
-    return vm.runInNewContext(expression, {auth, root:new Snapshot(root), data:new Snapshot(null), newData:new Snapshot(null), $uid:user.uid, $key:'lastWrite', now:Date.now()+1000, ...options});
-};
-test('Database rejects anonymous, pending, unverified and revoked writers', () => {
-    const write = rules.clubData.transItems.$id['.write'];
-    assert.equal(evaluate(write, {auth:null}), false);
-    assert.equal(evaluate(write, {root:new Snapshot({})}), false);
-    assert.equal(evaluate(write, {auth:{...auth, token:{...auth.token,email_verified:false}}}), false);
-    assert.equal(evaluate(write, {root:new Snapshot({accountAccess:{roles:{}}})}), false);
-    assert.equal(evaluate(write), true);
-    assert.equal(evaluate(write, {auth:owner}), true);
+test('Match data replaces every phone with one internal ID and keeps private fields apart', () => {
+    let next = 0;
+    const source = {
+        clubData: {
+            members: [{ id: 1, name: '가', phone: '010-1111-2222', status: '정회원', paid: [true], spouse: '나', role: '회장' }, { name: '다', phone: '01033334444', status: '정회원' }],
+            attendanceData: { phones: ['01011112222', '010-3333-4444'] }
+        },
+        rankingData: { tiers: { '010-1111-2222': 'A', '01033334444': 'B' }, history: [{ changes: [{ phone: '01011112222' }, { phone: '010-9999-0000' }] }] },
+        tennisHistory: { 100: { id: 100, date: '2026-10-30', title: '10월', players: [{ name: '가', phone: '010-1111-2222' }] } }
+    };
+    const { tree, privateMembers } = privatizeMatchTree(source, ['clubData', 'members'], { newId: () => `m_${++next}` });
+    const [first, second] = tree.clubData.members;
+    assert.equal(first.phone, 'm_1');
+    assert.deepEqual(Object.keys(first).sort(), ['id', 'name', 'phone', 'status']);
+    assert.deepEqual(privateMembers.m_1, { phone: '010-1111-2222', paid: [true], spouse: '나', role: '회장' });
+    assert.equal(second.phone, 'm_2');
+    assert.deepEqual(tree.rankingData.tiers, { m_1: 'A', m_2: 'B' });
+    assert.deepEqual(tree.clubData.attendanceData.phones, ['m_1', 'm_2']);
+    assert.equal(tree.tennisHistory[100].players[0].phone, 'm_1');
+    assert.equal(tree.rankingData.history[0].changes[1].phone, 'm_3');
+    assert.equal(privateMembers.m_3.phone, '010-9999-0000');
+    assert.equal(tree.tennisHistory[100].date, '2026-10-30');
+    assert.deepEqual(findPhoneLikePaths(tree), []);
 });
-test('Only owner can grant, revoke or read all account permissions', () => {
-    const rule = rules.accountAccess.roles;
-    for (const expression of [rule['.read'],rule.$uid['.write'],rules.accountAccess.requests['.read']]) {
-        assert.equal(evaluate(expression), false);
-        assert.equal(evaluate(expression,{auth:owner}), true);
-    }
-    assert.equal(evaluate(rule.$uid['.read']), true);
-    assert.equal(evaluate(rule.$uid['.read'], {$uid:'other'}), false);
-    assert.equal(rules['.read'],false);
-    assert.equal(rules['.write'],false);
+test('Already converted backups keep their IDs and private data', () => {
+    const { tree, privateMembers } = privatizeMatchTree({ members: [{ name: '가', phone: 'm_old' }] }, ['members'], { existing: { m_old: { phone: '010-1111-2222' } } });
+    assert.equal(tree.members[0].phone, 'm_old');
+    assert.equal(privateMembers.m_old.phone, '010-1111-2222');
 });
-test('Applicants can only submit their own pending request; verification still gates editing', () => {
-    const write = rules.accountAccess.requests.$uid['.write'];
-    const request = {uid:user.uid,email:user.email,name:'Next treasurer',status:'pending',requestedAt:Date.now()};
-    const input = {newData:new Snapshot(request)};
-    assert.equal(evaluate(write,input), true);
-    assert.equal(evaluate(write,{...input,auth:null}), false);
-    assert.equal(evaluate(write,{...input,$uid:'other'}), false);
-    assert.equal(evaluate(write,{...input,auth:{...auth,token:{...auth.token,email_verified:false}}}), true);
-    assert.equal(evaluate(write,{newData:new Snapshot({...request,status:'approved'})}), false);
-    assert.equal(evaluate(write,{newData:new Snapshot({...request,email:'other@example.com'})}), false);
-    assert.equal(evaluate(write,{...input,data:new Snapshot({...request,status:'approved'})}), false);
-    assert.equal(evaluate(write,{...input,data:new Snapshot({...request,status:'revoked'})}), true);
-    assert.equal(evaluate(write,{...input,newData:new Snapshot({...request,reviewedBy:'fake'})}), false);
+test('Leak checks report embedded phones without returning their digits', () => {
+    const paths = findPhoneLikePaths({ memo: '연락처 010-1234-5678', '01012345678': 'A', id: 1712345678901, date: '2026-10-30' });
+    assert.equal(paths.length, 2);
+    assert.ok(paths.every(item => !/\d{4}/.test(item)));
+    assert.equal(isPhoneValue('2026-10-30'), false);
+    assert.equal(isPhoneValue('m_abc'), false);
 });
-test('Owner grants can only create treasurer role with the applicant email', () => {
-    const validate = rules.accountAccess.roles.$uid['.validate'];
-    const record = {...grant,name:'Next treasurer',grantedAt:Date.now(),grantedBy:owner.uid};
-    assert.equal(evaluate(validate,{auth:owner,newData:new Snapshot(record)}),true);
-    assert.equal(evaluate(validate,{auth:owner,newData:new Snapshot({...record,role:'owner'})}),false);
-    assert.equal(evaluate(validate,{auth:owner,newData:new Snapshot({...record,email:'spoof@example.com'})}),false);
-});
-test('Bulk restore/import markers require owner, normal accounting writes allow treasurer', () => {
-    const write = rules.accountingSafety.meta.$key['.write'];
-    assert.equal(evaluate(write,{$key:'lastWrite'}),true);
-    assert.equal(evaluate(write,{$key:'lastRestore'}),false);
-    assert.equal(evaluate(write,{$key:'lastImport'}),false);
-    assert.equal(evaluate(write,{$key:'lastRestore',auth:owner}),true);
-    assert.equal(evaluate(rules.clubData.settings['.validate'],{newData:new Snapshot({adminPwd:'plaintext'})}),false);
+test('Rules separate accounting and tournament writers and hide private paths', () => {
+    const rules = JSON.parse(fs.readFileSync(new URL('../database.rules.json', import.meta.url))).rules;
+    assert.equal(rules['.read'], false);
+    assert.equal(rules['.write'], false);
+    assert.equal(rules.clubData['.read'], undefined);
+    assert.equal(rules.accountingSafety['.read'], undefined);
+    assert.match(rules.clubData.members_acc['.read'], /treasurer/);
+    assert.doesNotMatch(rules.clubData.members_acc['.read'], /director/);
+    assert.doesNotMatch(rules.matchData['.write'], /treasurer/);
+    assert.match(rules.matchData['.write'], /director/);
+    assert.equal(rules.matchData['.read'], true);
+    assert.doesNotMatch(rules.matchPrivate['.read'], /treasurer/);
 });
 test('All inline application scripts and new modules parse', () => {
-    const html = fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
-    for (const [,attributes,code] of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)) {
-        const args = ['--check'];
-        if(attributes.includes('module')) args.push('--input-type=module');
-        const result = spawnSync(process.execPath,args,{input:code,encoding:'utf8'});
-        assert.equal(result.status,0,result.stderr);
+    for (const page of ['../index.html', '../match/index.html', '../recovery.html']) {
+        const html = fs.readFileSync(new URL(page, import.meta.url), 'utf8');
+        for (const [, attributes, code] of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)) {
+            const args = ['--check'];
+            if (attributes.includes('module')) args.push('--input-type=module');
+            const result = spawnSync(process.execPath, args, { input: code, encoding: 'utf8' });
+            assert.equal(result.status, 0, `${page}: ${result.stderr}`);
+        }
     }
-    for (const file of ['account-access.js','settings-view.js','access-policy.js']) {
-        const result = spawnSync(process.execPath,['--check',new URL('../'+file,import.meta.url).pathname.replace(/^\/(\w:)/,'$1')],{encoding:'utf8'});
-        assert.equal(result.status,0,result.stderr);
+    for (const file of ['account-access.js', 'settings-view.js', 'access-policy.js', 'member-privacy.js']) {
+        const result = spawnSync(process.execPath, ['--check', new URL('../' + file, import.meta.url).pathname.replace(/^\/(\w:)/, '$1')], { encoding: 'utf8' });
+        assert.equal(result.status, 0, result.stderr);
     }
 });

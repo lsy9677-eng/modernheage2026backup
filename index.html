@@ -702,7 +702,7 @@ th:first-child, td:first-child {
             </div>
             
             <div class="backup-btns">
-    <button id="btnAccount" class="btn-sub account-trigger" onclick="openAccountDialog()" aria-label="로그인 또는 총무 권한 신청">로그인</button>
+    <button id="btnAccount" class="btn-sub account-trigger" onclick="openAccountDialog()" aria-label="로그인">로그인</button>
     <button id="btnSettings" class="btn-sub settings-trigger" onclick="openAppSettings()" aria-label="앱 설정"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-1 3-3 1-2 3 2 2-1 3 3 2 2-1 3 2 3-2 2-3-1-2 2-3-2-3-3-1-1-3Z"/><circle cx="12" cy="11" r="3"/></svg>설정</button>
     <input type="file" id="loadFile" accept=".json" style="display:none" onchange="importData(this)">
 </div>
@@ -1106,6 +1106,7 @@ th:first-child, td:first-child {
         <button type="button" class="nav-item" onclick="goTab('analysis', this)"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6l3 2"/></svg></span>미납</button>
         <button type="button" class="nav-item" onclick="goTab('receipts', this)"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span>영수증</button>
         <button type="button" class="nav-item" onclick="goTab('calendar', this)"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4M17 3v4M3 11h18M8 15h2M14 15h2"/></svg></span>일정</button>
+        <button type="button" class="nav-item" onclick="location.href='./match/'"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 4h8v6a4 4 0 0 1-8 0V4Z"/><path d="M8 6H4v2a4 4 0 0 0 4 4M16 6h4v2a4 4 0 0 1-4 4M12 14v4M8 21h8M10 18h4"/></svg></span>월례대회</button>
     </nav>
     
     <div class="fab admin-only" onclick="goTab('ledger', document.querySelector('.nav-item')); document.getElementById('tAmt').focus()">+</div>
@@ -1380,7 +1381,8 @@ th:first-child, td:first-child {
 </div>
 
 <script type="module">
-    import { installAccountAccess } from './account-access.js?v=20261030_03';
+    import { installAccountAccess } from './account-access.js?v=20261030_04';
+    import { toPublicAccountMembers } from './member-privacy.js?v=20261030_04';
     import { installCalendarReminders } from './calendar-reminders.js?v=20261030_02';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, set, get, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
@@ -1407,6 +1409,22 @@ const SAFETY_ROOT = 'accountingSafety';
 const MONTH_LOCK_ROOT = `${SAFETY_ROOT}/meta/monthLocks`;
 const CHANGE_HISTORY_ROOT = `${SAFETY_ROOT}/meta/changeHistory`;
 window.accountingMonthLocks = window.accountingMonthLocks || {};
+
+// 전화번호가 포함된 원본 명부는 관리자·총무에게만 내려받습니다.
+const PUBLIC_CLUB_KEYS = ['trans', 'receipts', 'transItems', 'receiptItems', 'deletedTrans', 'deletedReceipts', 'events', 'settings', 'auditState', 'membersPublic'];
+let accountMembersPrivate = null, stopAccountMembersWatch = null;
+window.accountMembersLoaded = false;
+function watchAccountMembers(enabled) {
+    stopAccountMembersWatch?.();
+    stopAccountMembersWatch = null;
+    accountMembersPrivate = null;
+    window.accountMembersLoaded = false;
+    if(!enabled) { window.applyClubMembers?.(); return; }
+    stopAccountMembersWatch = onValue(ref(db, `${CLUB_ROOT}/members_acc`), snapshot => {
+        accountMembersPrivate = snapshot.val() || [];
+        window.applyClubMembers?.();
+    }, error => console.warn('회원 명부 조회 실패:', error));
+}
 
 function accountingMonthKey(dateOrKey) {
     const s = String(dateOrKey || '');
@@ -1651,10 +1669,11 @@ window.onload = () => {
         }, 10000); // 10초 타임아웃
 
         // Firebase 데이터 불러오기: 본 데이터 + 별도 안전 미러를 합쳐서 표시
-        const clubRef = ref(db, CLUB_ROOT);
-        onValue(clubRef, async (snapshot) => {
+        const clubData = {}, loadedClubKeys = new Set();
+        let clubApplyQueued = false, clubErrorShown = false;
+        const applyClubData = async () => {
             document.getElementById('loadingOverlay').style.display = 'none';
-            const data = snapshot.val() || {};
+            const data = clubData;
             let mirror = {};
             try {
                 const mirrorSnap = await get(ref(db, `${SAFETY_ROOT}/liveMirror`));
@@ -1674,7 +1693,9 @@ window.onload = () => {
             mirrorTrans.forEach(x => { if (x && !deletedTrans[String(x.id)] && !transMap.has(String(x.id))) transMap.set(String(x.id), x); });
             window.trans = Array.from(transMap.values()).sort((a,b) => Number(b.id||0)-Number(a.id||0));
 
-            window.members = data.members_acc || data.members || [];
+            window.members = accountMembersPrivate ?? data.membersPublic ?? [];
+            // 원본 명부가 화면 데이터로 바뀐 뒤에만 저장을 허용합니다.
+            window.accountMembersLoaded = accountMembersPrivate !== null;
 
             const legacyReceipts = Array.isArray(data.receipts) ? data.receipts : Object.values(data.receipts || {});
             const itemReceipts = Object.values(data.receiptItems || {});
@@ -1693,10 +1714,23 @@ window.onload = () => {
             if(window.settings && window.settings.fees) currentFees = { ...DEFAULT_FEES, ...window.settings.fees };
             setCategories();
             renderAll();
+        };
+        const scheduleClubApply = () => {
+            if(clubApplyQueued || loadedClubKeys.size < PUBLIC_CLUB_KEYS.length) return;
+            clubApplyQueued = true;
+            setTimeout(() => { clubApplyQueued = false; applyClubData(); }, 30);
+        };
+        window.applyClubMembers = scheduleClubApply;
+        PUBLIC_CLUB_KEYS.forEach(key => onValue(ref(db, `${CLUB_ROOT}/${key}`), snapshot => {
+            clubData[key] = snapshot.val();
+            loadedClubKeys.add(key);
+            scheduleClubApply();
         }, (error) => {
             document.getElementById('loadingOverlay').style.display = 'none';
+            if(clubErrorShown) return;
+            clubErrorShown = true;
             alert("데이터를 불러오는 중 오류가 발생했습니다: " + error.message);
-        });
+        }));
     };
 
 function cacheCurrentData() {
@@ -1832,6 +1866,7 @@ async function pruneRestorePoints() {
 }
 
 async function createRestorePoint(reason='자동 저장', force=false) {
+    if(!window.accountMembersLoaded) return false;
     if(!window.isAdmin || restorePointBusy) return false;
     const now = Date.now();
     if(!force && now-lastAutoRestoreAt < AUTO_RESTORE_MIN_INTERVAL) return false;
@@ -1986,6 +2021,7 @@ window.restoreFromPoint = async (pointId) => {
         });
 
         updates[`${CLUB_ROOT}/members_acc`]=point.members_acc||[];
+        updates[`${CLUB_ROOT}/membersPublic`]=toPublicAccountMembers(point.members_acc);
         updates[`${CLUB_ROOT}/events`]=point.events||[];
         const restoredSettings = { ...(point.settings||{}) }; delete restoredSettings.adminPwd;
         updates[`${CLUB_ROOT}/settings`]=restoredSettings;
@@ -2113,10 +2149,12 @@ window.createSafetyBaseline = async () => {
 
 function saveToFirebase() {
     if(!window.isAdmin || !auth.currentUser) return Promise.reject(new Error('승인된 관리자 또는 총무 로그인이 필요합니다.'));
+    if(!window.accountMembersLoaded) return Promise.reject(new Error('회원 명부를 불러오는 중입니다. 잠시 후 다시 시도해주세요.'));
     cacheCurrentData();
     if(window.settings) delete window.settings.adminPwd;
     let updates = {};
     updates[CLUB_ROOT + '/members_acc'] = window.members;
+    updates[CLUB_ROOT + '/membersPublic'] = toPublicAccountMembers(window.members);
     updates[CLUB_ROOT + '/events'] = window.events;
     updates[CLUB_ROOT + '/settings'] = window.settings;
     if(window.auditState) updates[CLUB_ROOT + '/auditState'] = window.auditState;
@@ -2158,7 +2196,7 @@ window.saveAndExit = () => {
         if(typeof window.renderAccessSettings === 'function') window.renderAccessSettings();
     }
 
-    installAccountAccess({ auth, db, refreshUI: () => {
+    installAccountAccess({ app, auth, db, onManagerChange: watchAccountMembers, refreshUI: () => {
         if(typeof window.renderAll === 'function') window.renderAll(); else updateAdminUI();
     }, onManagerReady: () => {
         lastAutoRestoreAt = Number(localStorage.getItem('modernAccountLastRestorePointAt') || 0);
@@ -3647,14 +3685,14 @@ if (window.excludeInactive) {
 
             let nameHtml = `
             <div class="m-cell">
-                <input type="checkbox" class="mem-chk" value="${m.phone}" style="width:auto; margin-right:2px; vertical-align:middle;" onclick="checkBulkBtnVisibility()">
+                <input type="checkbox" class="mem-chk" value="${m.phone || ''}" style="width:auto; margin-right:2px; vertical-align:middle;" onclick="checkBulkBtnVisibility()">
                 <span class="m-idx">${idx + 1}</span>
                 <div class="m-name-box">
                     <span class="m-name" onclick="openModal('${safeId}', '${safeName}')">${m.name}</span>
                     ${fullPaid ? '<span class="full-paid-badge">✓ 완납</span>' : ''}
                     ${m.role ? `<span class="m-role">${m.role}</span>` : ''}
                 </div>
-                <a href="tel:${m.phone}" class="act-btn">📞</a>
+                ${m.phone ? `<a href="tel:${m.phone}" class="act-btn">📞</a>` : ''}
                 <span class="m-status" style="background:${BADGE_COLOR[m.status]||'#999'}">${m.status}</span>
             </div>`;
             // [수정 끝]
@@ -4565,7 +4603,7 @@ function initReportYears() {
             </div>
             <div style="text-align:right;">
                 <span class="u-amt">${formatStandard(item.info.amount)}</span>
-                <div class="u-sms-btn" onclick="location.href='sms:${m.phone}?body=${encodedMsg}'">📩</div>
+                ${m.phone ? `<div class="u-sms-btn" onclick="location.href='sms:${m.phone}?body=${encodedMsg}'">📩</div>` : ''}
             </div>`;
         list.appendChild(div);
     });
@@ -5404,7 +5442,7 @@ window.uploadReceipt = async () => {
         }
     }
     window.renderAll = () => { renderLedger(); renderStats(); renderMembers(); renderUnpaid(); renderReceipts(); renderCalendar(); updateAdminUI(); if (typeof window.renderDynamicQuickRecommendations === 'function') window.renderDynamicQuickRecommendations(); }
-    window.exportData = () => { const d={trans:window.trans, members:window.members, receipts:window.receipts, events:window.events, settings:window.settings}; const b=new Blob([JSON.stringify(d)],{type:'application/json'}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download='backup.json'; a.click(); }
+    window.exportData = () => { if(!window.accountMembersLoaded) return alert('회원 명부를 불러오는 중입니다. 잠시 후 다시 시도해주세요.'); const d={trans:window.trans, members:window.members, receipts:window.receipts, events:window.events, settings:window.settings}; const b=new Blob([JSON.stringify(d)],{type:'application/json'}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download='backup.json'; a.click(); }
     window.importData = (input) => {
         if(!window.isOwner) { input.value=''; return alert('전체 복구는 관리자만 할 수 있습니다.'); }
         const f=input.files[0]; if(!f) return;
@@ -5417,7 +5455,7 @@ window.uploadReceipt = async () => {
                 const updates={};
                 (d.trans||[]).forEach(x=>{ if(x&&x.id!=null){ const id=String(x.id); updates[`${CLUB_ROOT}/transItems/${id}`]=x; updates[`${SAFETY_ROOT}/liveMirror/transItems/${id}`]=x; updates[`${CLUB_ROOT}/deletedTrans/${id}`]=null; }});
                 (d.receipts||[]).forEach(x=>{ if(x&&x.id!=null){ const id=String(x.id); updates[`${CLUB_ROOT}/receiptItems/${id}`]=x; updates[`${SAFETY_ROOT}/liveMirror/receiptItems/${id}`]=x; updates[`${CLUB_ROOT}/deletedReceipts/${id}`]=null; }});
-                if(Array.isArray(d.members)) updates[`${CLUB_ROOT}/members_acc`]=d.members;
+                if(Array.isArray(d.members)) { updates[`${CLUB_ROOT}/members_acc`]=d.members; updates[`${CLUB_ROOT}/membersPublic`]=toPublicAccountMembers(d.members); }
                 if(Array.isArray(d.events)) updates[`${CLUB_ROOT}/events`]=d.events;
                 if(d.settings) { delete d.settings.adminPwd; updates[`${CLUB_ROOT}/settings`]=d.settings; }
                 updates[`${SAFETY_ROOT}/meta/lastImport`]={at:getKoreaTimestampISO(), file:f.name, stamp};
