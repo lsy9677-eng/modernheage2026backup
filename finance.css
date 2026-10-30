@@ -2,7 +2,15 @@
 @media screen {
     [hidden] { display: none !important; }
     .owner-only { display: none !important; }
-    html.account-dialog-open { overflow: hidden; }
+    html.account-dialog-open, html.calendar-dialog-open { overflow: hidden; }
+    .calendar-reminder-dialog > label, .calendar-reminder-fields > label { display: block; font-size: .8rem; font-weight: 650; color: #52637d; margin: 15px 0 7px; }
+    .calendar-reminder-check { display: flex; align-items: center; gap: 10px; padding: 9px 0; font-size: .85rem; }
+    .calendar-reminder-check input { width: 18px; height: 18px; min-height: 0; margin: 0; }
+    .calendar-reminder-actions { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin-top: 20px; }
+    .calendar-reminder-actions a { text-align: center; text-decoration: none; padding: 12px; }
+    .calendar-reminder-actions button:disabled { opacity: .5; cursor: default; }
+    .calendar-reminder-note { padding-top: 12px; border-top: 1px solid #e8edf4; }
+    .calendar-event-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid #e8edf4; flex-wrap: wrap; }
     .account-dialog { width: min(520px, calc(100% - 28px)); max-height: min(88dvh, 900px); padding: 24px; margin: auto; border: 1px solid #e2e8f2; border-radius: 22px; color: #192b46; background: #fff; box-shadow: 0 24px 100px #13274635; overscroll-behavior: contain; }
     .account-dialog::backdrop { background: #10213c80; backdrop-filter: blur(4px); }
     .settings-dialog { width: min(640px, calc(100% - 28px)); background: #f6f8fc; }

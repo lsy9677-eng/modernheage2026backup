@@ -1,4 +1,4 @@
-import { createSettingsPage } from './settings-view.js?v=20261030_02';
+import { createSettingsPage } from './settings-view.js?v=20261030_03';
 import {
     createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
     onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail,

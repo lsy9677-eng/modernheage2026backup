@@ -44,6 +44,7 @@ export function createSettingsPage({ preview = false } = {}) {
         <div class="dialog-heading"><div><div class="dialog-eyebrow">PREFERENCES</div><h2 id="settingsDialogTitle">설정</h2></div><button type="button" class="dialog-close" data-close-dialog="settingsDialog" aria-label="설정 창 닫기">×</button></div>
         <div id="settingsMessage" class="access-message" role="status" aria-live="polite" hidden></div>
         <div class="card"><div class="settings-heading">내 계정</div><div class="account-summary"><span id="settingsAccountRole" class="account-role">방문자</span><span id="settingsAccountEmail"></span></div><div class="settings-actions"><button type="button" class="btn-sub" id="settingsOpenAccount">로그인·신청 상태 확인</button></div></div>
+        <div class="card"><div class="settings-heading">휴대폰 일정 알림</div><p class="settings-description">휴대폰 캘린더에 일정을 저장하고 전날·당일 알림을 받으세요. 별도 서버 요금제 없이 사용할 수 있습니다.</p><button class="btn-sub" type="button" data-dismiss-settings onclick="openCalendarReminders()">캘린더에 저장·알림 설정</button></div>
         <div class="card owner-only" id="accessApprovalCard" hidden>
             <div class="settings-heading">총무 권한 관리</div><p class="settings-description">신청한 이메일과 이름을 확인하고 승인해주세요. 권한 회수는 즉시 적용됩니다. 이메일 인증을 마치지 않은 계정은 승인 후에도 편집할 수 없습니다.</p>
             <div id="accessRequestsList" aria-live="polite">신청 내역을 불러오는 중입니다.</div>
