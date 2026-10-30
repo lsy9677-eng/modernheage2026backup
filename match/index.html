@@ -1693,7 +1693,8 @@
                 <div id="unassignedList" style="display:flex; flex-wrap:wrap; gap:5px; margin-top:5px; justify-content: center;"></div>
             </div>
         </div>
-        <div class="tier-board" id="tierBoard"></div>
+        <div id="rosterSyncNotice" style="padding:12px 16px;margin-bottom:14px;border-radius:12px;background:#edf3ff;color:#315a8a;font-size:.82rem">회계 회원명부와 연결 중입니다.</div>
+<div class="tier-board" id="tierBoard"></div>
     </div>
     
     <div class="card admin-only" style="background:#fffde7; border:2px solid var(--ball-yellow);">
@@ -2079,7 +2080,7 @@
                 <button onclick="manualSetTier('E')" style="padding:8px; border:none; border-radius:5px; background:var(--tier-e); color:white;">탈회</button>
                 <button onclick="manualSetTier(null)" style="padding:8px; border:none; border-radius:5px; background:#999; color:white;">X</button>
             </div>
-            <button class="btn-action bg-red" onclick="deleteCurrentPlayer()" style="margin-top:8px;">🗑️ 회원 삭제</button>
+            <button class="btn-action bg-red" onclick="deleteCurrentPlayer()" style="margin-top:8px;">명부에서 상태 관리</button>
         </div>
         
         <input type="hidden" id="pModalPhone">
@@ -2148,7 +2149,7 @@
 
 <div id="memberManagerModal" class="modal-overlay" onclick="closeModal('memberManagerModal')">
     <div class="modal" onclick="event.stopPropagation()">
-        <h3 style="text-align:center;">👥 회원 관리</h3>
+        <h3 style="text-align:center;">👥 통합 회원 명단 · 사진 관리</h3><p style="font-size:.8rem;color:#617089">회원 추가·이름·휴회·탈회는 회계 회원명부에서 관리합니다. 여기서는 사진과 경기 등급을 관리합니다.</p>
         <div style="background:#e8f5e9; padding:10px; border-radius:10px; margin-bottom:15px;">
             <div style="font-size:0.9rem; margin-bottom:5px; font-weight:bold;" id="memberActionTitle">회원 등록</div>
             <input type="hidden" id="currentEditPhone"> <input type="text" id="newMemberName" class="input-full" placeholder="이름 (필수)" style="margin-bottom:5px;">
@@ -2157,7 +2158,7 @@
                 <span style="font-size:0.8rem;">📸 프로필 사진: </span>
                 <input type="file" id="newMemberPhoto" accept="image/*" style="font-size:0.8rem;">
             </div>
-            <button class="btn-action bg-green" onclick="addNewMember()">등록 / 수정</button>
+            <button class="btn-action bg-green" onclick="addNewMember()">선택 회원 사진 저장</button>
             <button class="btn-action bg-red admin-only" id="btnDeleteMember" onclick="deleteMember()" style="margin-top:5px; display:none;">🗑️ 회원 삭제</button>
         </div>
         <div id="memberListForAdmin" style="height:250px; overflow-y:auto; border:1px solid #eee; border-radius:5px;"></div>
@@ -2206,6 +2207,7 @@
     </div>
 </div>
 <script type="module">
+    import { projectMatchRoster, effectiveMatchTier, rosterPlayerMatches, watchRosterYear } from '../roster-policy.js?v=20261030_01';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, set, onValue, update, remove, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
@@ -2306,6 +2308,22 @@ const auth = getAuth(app);
 
 // [중요] 모든 전역 변수를 최상단에서 미리 초기화 (오류 방지)
     window.allMembers = [];
+    let matchRosterSource = [], accountRosterSource = null, matchRosterLoaded = false;
+    window.unifiedRosterReady = false;
+    function currentMemberTier(member) { return effectiveMatchTier(member, window.rankingData?.tiers || {}); }
+    function refreshUnifiedRoster() {
+        if(accountRosterSource === null || !matchRosterLoaded) return;
+        window.unifiedRosterReady = true;
+        window.allMembers = projectMatchRoster(accountRosterSource, matchRosterSource);
+        const eligible = new Set(window.allMembers.filter(m => m.status !== '휴회' && m.status !== '탈회').map(m => m.phone));
+        if(window.attendanceSet) window.attendanceSet = new Set([...(window.serverAttendanceIds || window.attendanceSet)].filter(id => eligible.has(id)));
+        renderBoard(); renderMemberSelector();
+        if(typeof renderMemberListForAdmin === 'function') renderMemberListForAdmin();
+        const active=window.allMembers.filter(m=>m.status!=='휴회'&&m.status!=='탈회').length;
+        const note=document.getElementById('rosterSyncNotice');
+        if(note) note.textContent='회계 회원명부 기준 '+window.allMembers.length+'명 · 활동 '+active+'명 · 휴회 '+window.allMembers.filter(m=>m.status==='휴회').length+'명 · 탈회 '+window.allMembers.filter(m=>m.status==='탈회').length+'명';
+    }
+    watchRosterYear(refreshUnifiedRoster);
     
 
     // =========================================================
@@ -2316,6 +2334,9 @@ const auth = getAuth(app);
     }
 
     async function saveMembersSafe(nextMembers){
+      if(!window.isAdmin || !window.unifiedRosterReady) return false;
+      const requested = new Map((nextMembers || []).map(member=>[member.phone,member]));
+      nextMembers = projectMatchRoster(accountRosterSource, projectMatchRoster(accountRosterSource,matchRosterSource).map(member=>({...member,...(requested.get(member.phone)||{}),phone:member.phone,accountMemberId:member.accountMemberId})));
       try{
         const snap = await get(ref(db, ROOT + 'clubData/members'));
         const prev = snap.val() || [];
@@ -2393,13 +2414,11 @@ window.matchHistory = [];
 
         // 데이터 로드 리스너들
         onValue(ref(db, ROOT + 'clubData/members'), (snap) => {
-            window.allMembers = snap.val() || [];
-            // ID 없는 구버전 회원 자동 패치
-            let fixed = false;
-            window.allMembers.forEach(m => { if(!m.phone){ m.phone = createMemberId(); fixed=true; }});
-            if(fixed) saveMembersSafe(window.allMembers);
-            if(document.getElementById('page-rank').classList.contains('active')) renderBoard();
+            matchRosterSource = snap.val() || []; matchRosterLoaded = true; refreshUnifiedRoster();
         });
+        onValue(ref(db, 'clubData/membersPublic'), (snap) => {
+            accountRosterSource = snap.val() || []; refreshUnifiedRoster();
+        }, error => { window.unifiedRosterReady=false; console.error('Roster source unavailable:',error.code); });
         
         onValue(ref(db, ROOT + 'rankingData'), (snap) => {
             const val = snap.val();
@@ -2421,7 +2440,7 @@ window.matchHistory = [];
         });
 
         onValue(ref(db, ROOT + 'clubData/tierNames'), (snap) => {
-            if(snap.val()) window.tierNames = { ...window.tierNames, ...snap.val() };
+            if(snap.val()) window.tierNames = { ...window.tierNames, ...snap.val(), D:'휴회', E:'탈회' };
             renderBoard();
         });
         
@@ -2429,10 +2448,13 @@ window.matchHistory = [];
         onValue(ref(db, ROOT + 'clubData/attendanceData'), (snap) => {
             const val = snap.val();
             if (val && val.phones && Array.isArray(val.phones)) {
-                window.attendanceSet = new Set(val.phones.filter(id => !isPhoneValue(id)));
+                const active=new Set(window.allMembers.filter(m=>m.status!=='휴회'&&m.status!=='탈회').map(m=>m.phone));
+                window.serverAttendanceIds = val.phones.filter(id => !isPhoneValue(id));
+                window.attendanceSet = new Set(window.serverAttendanceIds.filter(id => !window.unifiedRosterReady || active.has(id)));
                 localStorage.setItem('attendanceSet', JSON.stringify([...window.attendanceSet]));
             }
-            // Firebase에 데이터 없으면 로컬스토리지 값 그대로 유지
+            if(!val) { window.serverAttendanceIds=[]; window.attendanceSet=new Set(); localStorage.setItem('attendanceSet','[]'); }
+            // Empty server state clears stale attendance on every device.
             if (typeof window.updateAttendanceBtn === 'function') window.updateAttendanceBtn();
             renderBoard();
         });
@@ -2470,13 +2492,16 @@ window.matchHistory = [];
     window.openMemberManager = () => { 
         document.getElementById('memberManagerModal').style.display='flex'; 
         // 모달 열 때 입력 필드 초기화 (등록 모드 준비)
-        document.getElementById('memberActionTitle').innerText = "회원 등록";
+        document.getElementById('memberActionTitle').innerText = "사진 변경 · 아래 회원을 선택해주세요";
         document.getElementById('currentEditPhone').value = "";
         document.getElementById('newMemberName').value = "";
         document.getElementById('newMemberPhone').value = "";
         document.getElementById('newMemberPhoto').value = "";
         document.getElementById('btnDeleteMember').style.display = 'none';
 
+        document.getElementById('newMemberName').readOnly = true;
+        document.getElementById('newMemberPhone').disabled = true;
+        document.getElementById('newMemberPhone').placeholder = '연락처는 회계 회원명부에서 관리';
         renderMemberListForAdmin();
     }
     
@@ -2485,7 +2510,7 @@ window.matchHistory = [];
         listDiv.innerHTML = window.allMembers.map(m => {
             const realPhone = window.memberPrivate?.[m.phone]?.phone;
             const displayPhone = realPhone ? `(${realPhone})` : '<span style="color:#aaa;">(번호 없음)</span>';
-            const tier = window.rankingData?.tiers?.[m.phone];
+            const tier = currentMemberTier(m);
             const statusLabel = tier === 'D' ? '휴회' : (tier === 'E' || m.status === '탈회' ? '탈회' : '정회원');
 
             // [FIX: 1단계] 목록 클릭 시 loadMemberToManager 호출
@@ -2501,7 +2526,7 @@ window.matchHistory = [];
         const member = window.allMembers.find(m => m.phone === phoneId);
         if(!member) return;
 
-        document.getElementById('memberActionTitle').innerText = "회원 수정/삭제";
+        document.getElementById('memberActionTitle').innerText = "선택 회원 사진 변경";
         document.getElementById('currentEditPhone').value = member.phone;
         document.getElementById('newMemberName').value = member.name;
         
@@ -2521,6 +2546,7 @@ window.matchHistory = [];
 
     async function deleteMemberByPhone(phoneId, name, reopenManager = false) {
         if (!phoneId) return;
+        return alert('회원 삭제·휴회·탈회는 회계 앱의 회원명부에서 관리해주세요.');
         if (!confirm(`정말 ${name} 회원을 삭제하시겠습니까?\n\n현재 회원명부와 등급에서만 삭제되며, 과거 경기·MVP 기록은 보존됩니다.`)) return;
 
         window.allMembers = window.allMembers.filter(m => m.phone !== phoneId);
@@ -2550,57 +2576,17 @@ window.matchHistory = [];
     }
     
     // [FIX: 2단계] 등록/수정 함수
-    window.addNewMember = async () => { 
-        const name = document.getElementById('newMemberName').value.trim();
-        let phone = document.getElementById('newMemberPhone').value.trim();
-        const fileInput = document.getElementById('newMemberPhoto');
-        const currentEditPhone = document.getElementById('currentEditPhone').value; 
-        
-        if(!name) return alert("이름은 필수 입력 항목입니다.");
-        
-        let memberToUpdate = null;
-        let isNewMember = true;
-        
-        if (currentEditPhone) { // 수정 모드
-            memberToUpdate = window.allMembers.find(m => m.phone === currentEditPhone);
-            isNewMember = false;
-        } else { // 신규 등록 모드
-            if (phone && Object.values(window.memberPrivate || {}).some(item => item?.phone === phone)) {
-                return alert("입력하신 전화번호가 이미 다른 회원에게 등록되어 있습니다. 수정하려면 목록에서 해당 회원을 클릭하세요.");
-            }
-            memberToUpdate = { phone: createMemberId(), status:'정회원', name: name }; 
-        }
-        
-        // 데이터 업데이트 및 ID 관리
-        memberToUpdate.name = name;
-        
-        const memberId = memberToUpdate.phone;
-        
-        let photo = '';
-        if(fileInput.files[0]) { 
-            photo = await resizeImage(fileInput.files[0], 300); 
-            memberToUpdate.photo = photo;
-        } 
-        
-        if (isNewMember) {
-            window.allMembers.push(memberToUpdate);
-        } else {
-            const index = window.allMembers.findIndex(m => m.phone === currentEditPhone);
-            if(index !== -1) window.allMembers[index] = memberToUpdate;
-        }
-
-        await saveMembersSafe(window.allMembers);
-        try {
-            await set(ref(db, `${PRIVATE_ROOT}/${memberId}/phone`), phone || null);
-        } catch (err) {
-            return alert('전화번호 저장 중 오류가 발생했습니다: ' + err.message);
-        }
-        alert(`회원 정보가 ${isNewMember ? '등록' : '수정'}되었습니다.`);
-        openMemberManager(); 
-        renderBoard(); 
-        renderMemberSelector();
-    }
-
+    window.addNewMember = async () => {
+        if(!window.isAdmin) return;
+        const id=document.getElementById('currentEditPhone').value;
+        const member=window.allMembers.find(m=>m.phone===id);
+        if(!member) return alert('회원 추가·이름·상태 변경은 회계 회원명부에서 해주세요. 사진을 바꾸려면 아래 회원을 선택해주세요.');
+        const file=document.getElementById('newMemberPhoto').files[0];
+        if(!file) return alert('변경할 사진을 선택해주세요.');
+        member.photo=await resizeImage(file,300);
+        if(await saveMembersSafe(window.allMembers)) { alert('사진이 저장되었습니다.'); openMemberManager(); renderBoard(); }
+        else alert('사진 저장에 실패했습니다. 다시 시도해주세요.');
+    };
 
     // --- 나머지 기존 함수들 ---
     
@@ -2640,7 +2626,7 @@ window.matchHistory = [];
         window.allMembers.forEach(m => {
             // [중요] 여기서 에러가 나지 않도록 tierMap 사용
             // 구버전에서 status만 '탈회'로 저장된 회원도 탈회 조에 표시한다.
-            const tier = m.status === '탈회' ? 'E' : tierMap[m.phone]; 
+            const tier = currentMemberTier(m);
             
             if (tier && TIERS.includes(tier)) { 
                 groups[tier].push(m); 
@@ -2656,7 +2642,7 @@ window.matchHistory = [];
         });
         
         document.getElementById('unassignedArea').style.display = (unassignedList.children.length > 0) ? 'block' : 'none';
-        document.getElementById('totalMemberCnt').innerText = `총 ${assignedCount}명`;
+        document.getElementById('totalMemberCnt').innerText = `총 ${window.allMembers.length}명 · 미배정 ${window.allMembers.length-assignedCount}명`;
         
         // 참석 버튼 상태 업데이트
         if (typeof updateAttendanceBtn === 'function') updateAttendanceBtn();
@@ -2672,7 +2658,7 @@ window.matchHistory = [];
             const displayName = (window.tierNames && window.tierNames[t]) ? window.tierNames[t] : t;
 
             header.innerHTML = `
-                <div style="line-height:1.1;">${displayName}조</div>
+                <div style="line-height:1.1;">${t === 'D' || t === 'E' ? displayName : displayName+'조'}</div>
                 <div style="font-size:0.8rem; font-weight:normal; margin-top:2px;">${groups[t].length}명</div>
             `;
             
@@ -2739,7 +2725,7 @@ window.matchHistory = [];
         const attending = window.attendanceSet || new Set();
         
         ACTIVE_TIERS.forEach(t => {
-            const tierMembers = window.allMembers.filter(m => window.rankingData.tiers[m.phone] === t).sort((a,b)=>a.name.localeCompare(b.name));
+            const tierMembers = window.allMembers.filter(m => currentMemberTier(m) === t).sort((a,b)=>a.name.localeCompare(b.name));
             if(tierMembers.length > 0) {
                 const groupTitle = document.createElement('div');
                 groupTitle.style.cssText = "grid-column: 1/-1; font-size:0.8rem; font-weight:bold; margin-top:5px; color:#777;";
@@ -2765,11 +2751,13 @@ window.matchHistory = [];
         const isSeed = window.currentMatch.useSeed && isSeedCheck.checked;
         
         if(!name) return;
+        const sourceMember = window.allMembers.find(m=>m.name===name);
+        if(sourceMember && (sourceMember.status==='휴회'||sourceMember.status==='탈회')) return alert('휴회·탈회 회원은 새 경기 참가자로 추가할 수 없습니다.');
         if(window.currentMatch.players.some(p=>p.name===name)) return alert("이미 있습니다.");
         if(window.currentMatch.players.length >= MAX_PLAYERS) return alert(`최대 ${MAX_PLAYERS}명까지 가능합니다.`);
 
         window.currentMatch.players.push({ 
-            name, isSeed: isSeed, id: Date.now()+Math.random(), 
+            name, isSeed: isSeed, id: Date.now()+Math.random(), ...(sourceMember ? {accountMemberId:sourceMember.accountMemberId,matchMemberId:sourceMember.phone} : {}),
             handicap:0, wins:0, draws:0, losses:0, scored:0, conceded:0, pts:0, diff:0, num:0, age:0 
         });
         
@@ -3543,18 +3531,18 @@ if (window.isAdmin) {
         modal.style.display='flex'; 
         document.getElementById('pModalName').innerText=m.name; 
         document.getElementById('pModalPhone').value=m.phone; 
-        document.getElementById('pModalTier').innerText=window.rankingData.tiers[m.phone]||'미배정'; 
+        document.getElementById('pModalTier').innerText=currentMemberTier(m)||'미배정';
         document.getElementById('pModalImg').src=m.photo||''; 
 
         // 1. 기존 개인 매치 기록 분석 로직
         let totalGames = 0, totalWins = 0;
         let historyHtml = '';
-        const myMatches = window.matchHistory.filter(h => h.players.some(p => p.name === m.name));
+        const myMatches = window.matchHistory.filter(h => h.players.some(p => rosterPlayerMatches(m,p)));
         myMatches.sort((a,b) => b.id - a.id); 
 
         let graphMap = new Map();
         myMatches.forEach(h => {
-            const pData = h.players.find(p => p.name === m.name);
+            const pData = h.players.find(p => rosterPlayerMatches(m,p));
             if(pData) {
                 totalWins += (pData.wins || 0);
                 totalGames += ((pData.wins||0) + (pData.draws||0) + (pData.losses||0));
@@ -3978,6 +3966,7 @@ window.deleteMatch = (e, id) => {
     // [추가] 로그인 상태를 감지해서 자동으로 UI를 바꿔주는 코드
     let stopRoleWatch = null, stopPrivateWatch = null;
     function applyMatchRole(role) {
+        const wasManager=window.isAdmin;
         window.isAdmin = canManageMatch(role);
         if (window.isAdmin && !stopPrivateWatch) {
             stopPrivateWatch = onValue(ref(db, PRIVATE_ROOT), (snap) => {
@@ -3988,6 +3977,12 @@ window.deleteMatch = (e, id) => {
             stopPrivateWatch();
             stopPrivateWatch = null;
             window.memberPrivate = {};
+        }
+        if(wasManager && !window.isAdmin) {
+            document.querySelectorAll('.modal-overlay').forEach(modal=>modal.style.display='none');
+            document.getElementById('memberListForAdmin')?.replaceChildren();
+            document.getElementById('reportContent')?.replaceChildren();
+            for(const id of ['newMemberPhone','currentEditPhone']) {const input=document.getElementById(id);if(input)input.value='';}
         }
         updateAdminUI();
     }
@@ -4021,12 +4016,14 @@ const container = document.getElementById('tierNameEditList');
     }
     window.manualSetTier = async (tier) => {
         const phone = document.getElementById('pModalPhone').value;
-        if(!phone) return;
+        if(!phone || !window.isAdmin) return;
+        const canonical=window.allMembers.find(m=>m.phone===phone);
+        if(tier==='D'||tier==='E'||canonical?.status==='휴회'||canonical?.status==='탈회') return alert('휴회·탈회 및 복귀는 회계 회원명부에서 변경해주세요. 경기 등급은 활동 회원에게만 지정할 수 있습니다.');
         if(tier) window.rankingData.tiers[phone] = tier;
         else delete window.rankingData.tiers[phone]; 
 
         const member = (window.allMembers || []).find(m => m.phone === phone);
-        if (member) member.status = tier === 'D' ? '휴회' : (tier === 'E' ? '탈회' : '정회원');
+        // Member lifecycle is owned by the accounting roster.
 
         try {
             await set(ref(db, ROOT + 'rankingData/tiers'), window.rankingData.tiers);
@@ -4606,7 +4603,7 @@ window.adjustPairs = (divId, type) => {
         const attending = window.attendanceSet || new Set();
 
         if (key) {
-            grid.innerHTML = window.allMembers.filter(m => m.name.includes(key)).sort((a,b) => a.name.localeCompare(b.name))
+            grid.innerHTML = window.allMembers.filter(m => m.status!=='휴회' && m.status!=='탈회' && m.name.includes(key)).sort((a,b) => a.name.localeCompare(b.name))
                 .map(m => {
                     const isAtt = attending.size > 0 && attending.has(m.phone);
                     return `<div class="select-chip${isAtt?' is-attending':''}" onclick="selectTeamMember('${m.name}')">${m.name}</div>`;
@@ -4615,7 +4612,7 @@ window.adjustPairs = (divId, type) => {
         }
 
         ACTIVE_TIERS.forEach(t => {
-            const members = window.allMembers.filter(m => window.rankingData.tiers[m.phone] === t).sort((a,b) => a.name.localeCompare(b.name));
+            const members = window.allMembers.filter(m => currentMemberTier(m) === t).sort((a,b) => a.name.localeCompare(b.name));
             if(members.length > 0) {
                 const header = document.createElement('div'); header.className = 'selector-group-title'; header.innerText = `${t}조`; grid.appendChild(header);
                 members.forEach(m => {
@@ -4628,7 +4625,7 @@ window.adjustPairs = (divId, type) => {
                 });
             }
         });
-        const unranked = window.allMembers.filter(m => !window.rankingData.tiers[m.phone]).sort((a,b) => a.name.localeCompare(b.name));
+        const unranked = window.allMembers.filter(m => !currentMemberTier(m)).sort((a,b) => a.name.localeCompare(b.name));
         if(unranked.length > 0) {
              const header = document.createElement('div'); header.className = 'selector-group-title'; header.innerText = '미배정'; grid.appendChild(header);
              unranked.forEach(m => {
@@ -5098,14 +5095,14 @@ window.calculateMVP = function(targetYear) {
         
         // 정렬: 등급순(A->B->C->D) -> 이름순
         const sortedMembers = [...window.allMembers].sort((a,b) => {
-            const tierA = window.rankingData.tiers[a.phone] || 'Z';
-            const tierB = window.rankingData.tiers[b.phone] || 'Z';
+            const tierA = currentMemberTier(a) || 'Z';
+            const tierB = currentMemberTier(b) || 'Z';
             if(tierA !== tierB) return tierA.localeCompare(tierB);
             return a.name.localeCompare(b.name);
         });
 
         sortedMembers.forEach((m, i) => {
-            const tier = window.rankingData.tiers[m.phone] || '-';
+            const tier = currentMemberTier(m) || '-';
             
             // 전화번호 포맷팅 (01012345678 -> 010-1234-5678)
             let phone = window.memberPrivate?.[m.phone]?.phone || '(비공개)';
@@ -5595,7 +5592,7 @@ window.openAttendanceModal = () => {
     ACTIVE_TIERS.forEach(t => {
         const safeId = t.replace('(-)', 'm');
         const tierMembers = window.allMembers
-            .filter(m => window.rankingData.tiers[m.phone] === t && m.status !== '탈회')
+            .filter(m => currentMemberTier(m) === t && m.status !== '탈회')
             .sort((a,b) => a.name.localeCompare(b.name));
         if (!tierMembers.length) return;
         

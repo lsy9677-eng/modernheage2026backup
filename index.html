@@ -1381,8 +1381,9 @@ th:first-child, td:first-child {
 </div>
 
 <script type="module">
+    import { visibleRoster, applyMemberLifecycle, watchRosterYear } from './roster-policy.js?v=20261030_01';
     import { installAccountAccess } from './account-access.js?v=20261030_05';
-    import { toPublicAccountMembers } from './member-privacy.js?v=20261030_04';
+    import { toPublicAccountMembers } from './member-privacy.js?v=20261030_05';
     import { installCalendarReminders } from './calendar-reminders.js?v=20261030_02';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, set, get, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
@@ -2203,7 +2204,8 @@ window.saveAndExit = () => {
         setTimeout(() => { if(window.isAdmin) createRestorePoint('Account login', false); }, 1200);
         setTimeout(() => { if(window.isAdmin) window.refreshRestoreHealth(true); }, 250);
     }});
-    installCalendarReminders({ getEvents: () => window.events || [], getMembers: () => window.members || [] });
+    installCalendarReminders({ getEvents: () => window.events || [], getMembers: () => visibleRoster(window.members || []) });
+    watchRosterYear(() => { if(typeof window.renderAll === 'function') window.renderAll(); });
 
     function formatShort(amount) {
         if (!amount || amount === 0) return '-';
@@ -2961,9 +2963,10 @@ window.renderLedger = () => {
     }
     
     function updateChipCounts() {
-        const counts = { '전체': window.members.length, '직책': 0 };
+        const currentMembers = visibleRoster(window.members);
+        const counts = { '전체': currentMembers.length, '직책': 0 };
         STATUS_LIST.forEach(s => { if(s!=='직책') counts[s] = 0; });
-        window.members.forEach(m => { if(m.role && m.role.trim() !== '') counts['직책']++; if(counts[m.status] !== undefined) counts[m.status]++; });
+        currentMembers.forEach(m => { if(m.role && m.role.trim() !== '') counts['직책']++; if(counts[m.status] !== undefined) counts[m.status]++; });
         const chips = document.getElementById('statusChips').children;
         for(let btn of chips) { const rawTxt = btn.id.replace('chip-',''); if(counts[rawTxt] !== undefined) btn.innerText = `${rawTxt}(${counts[rawTxt]})`; }
     }
@@ -3573,7 +3576,7 @@ function checkRoleMatch(memberRole, groupKey) {
     // 현재 화면에서 조회 중인 명부 조건 그대로 가져오기
     window.getFilteredMembersForDisplay = () => {
         const key = document.getElementById('searchMem').value;
-        let list = [...window.members];
+        let list = visibleRoster(window.members);
 
         if(key) list = list.filter(m => m.name.includes(key));
         if (!window.memFilters.statuses.has('all')) list = list.filter(m => window.memFilters.statuses.has(m.status));
@@ -3605,7 +3608,7 @@ function checkRoleMatch(memberRole, groupKey) {
         const tf = document.getElementById('memFoot'); tf.innerHTML = '';
 
         const key = document.getElementById('searchMem').value;
-        let list = [...window.members];
+        let list = visibleRoster(window.members);
 
         // 1. 이름 검색
         if(key) list = list.filter(m => m.name.includes(key));
@@ -3948,7 +3951,7 @@ window.saveFeeSettings = () => {
 
                 const dayEvents = window.events.filter(e => e.date === full); 
                 const mmdd = full.substring(5); 
-                const birthdayMembers = window.members.filter(m => m.birthday && m.birthday.substring(5) === mmdd);
+                const birthdayMembers = visibleRoster(window.members).filter(m => m.birthday && m.birthday.substring(5) === mmdd);
 
                 let dot = ''; 
                 if(dayEvents.length > 0) dot += `<div class="event-dot"></div>`;
@@ -3984,7 +3987,7 @@ window.deleteEvent = (id) => {
     window.renderDayEvents = (date) => {
         const list = document.getElementById('dayEventList'); list.innerHTML = '';
 const mmdd = date.substring(5);
-    const birthdays = window.members.filter(m => m.birthday && m.birthday.substring(5) === mmdd);
+    const birthdays = visibleRoster(window.members).filter(m => m.birthday && m.birthday.substring(5) === mmdd);
     birthdays.forEach(m => {
         const row=document.createElement('div'); row.className='calendar-event-row';
         const title=document.createElement('span');title.textContent=`🎂 ${m.name}님 생일`;title.style.color='var(--expense)';
@@ -4021,7 +4024,7 @@ const mmdd = date.substring(5);
         .map(e => ({ ...e, isBirthday: false }));
     
     if (showBirthday) {
-        window.members.forEach(m => {
+        visibleRoster(window.members).forEach(m => {
             if (m.birthday) {
                 displayList.push({
                     id: 'bday-' + m.id,
@@ -5640,12 +5643,14 @@ window.uploadReceipt = async () => {
 
         if(m){
             // 기존 회원 수정
+            const lifecycle = applyMemberLifecycle({...m,status},m);
             m.role=role; m.phone=phone; m.status=status; m.spouse=spouse; m.name=name; m.birthday=birthday;
+            if(lifecycle.withdrawnYear) m.withdrawnYear=lifecycle.withdrawnYear; else delete m.withdrawnYear;
             m.joinDate=joinDate; // ✅ 추가됨
             if(!m.id) m.id = Date.now();
         } else {
             // 신규 회원 추가
-            window.members.push({id:Date.now(), name, birthday, joinDate, role, phone, status, spouse, paid:Array(12).fill(false)}); // ✅ joinDate 추가됨
+            window.members.push(applyMemberLifecycle({id:Date.now(), name, birthday, joinDate, role, phone, status, spouse, paid:Array(12).fill(false)}));
         }
         saveToFirebase().then(() => { renderAll(); closeModal(); });
     }
