@@ -2036,7 +2036,7 @@
     <div class="nav-item" onclick="goTab('history')">
         <span class="nav-icon">📜</span><span class="nav-text">히스토리</span>
     </div>
-    <div class="nav-item" onclick="location.href='../'">
+    <div class="nav-item" onclick="window.allowPageLeave = true; location.href='../'">
         <span class="nav-icon">💰</span><span style="font-size:.78rem;font-weight:700;">회계</span>
     </div>
 </div>
@@ -2383,7 +2383,7 @@ window.matchHistory = [];
     const MIN_PLAYERS=4; const MAX_PLAYERS=12;
 
     // 뒤로가기 방지
-    window.addEventListener('beforeunload', (event) => { event.preventDefault(); event.returnValue = ''; });
+    window.addEventListener('beforeunload', (event) => { if (window.allowPageLeave) return; event.preventDefault(); event.returnValue = ''; });
     history.pushState(null, null, location.href);
 
     
@@ -3970,6 +3970,7 @@ window.deleteMatch = (e, id) => {
                 });
             }
         } else {
+            window.allowPageLeave = true;
             location.href = '../?login=1';
         }
     }
