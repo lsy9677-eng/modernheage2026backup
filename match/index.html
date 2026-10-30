@@ -1780,7 +1780,7 @@
             <label style="margin-top:5px; display:block; font-size:1rem;">선수 등록 (4~12명)</label>
             <div style="display:flex; align-items:center; margin-bottom:5px; font-size:0.9rem;">
             <div id="attendanceNotice" style="display:none; background:#FFF3E0; border:1px solid #FF9800; border-radius:8px; padding:6px 10px; font-size:0.82rem; color:#E65100; margin-bottom:8px;">
-                🟠 <b>대회 참석 체크된 회원</b>이 주황색으로 표시됩니다. 참석자를 우선 선택하세요.
+                <b>대회 참석 체크된 회원</b>이 파란색으로 표시됩니다. 참석자를 우선 선택하세요.
             </div>
                 <input type="checkbox" id="checkIsSeed" style="margin-right:5px;">
                 <label for="checkIsSeed" style="color:#f57f17; font-weight:bold;">👑 시드 선수로 등록</label>
@@ -2025,19 +2025,19 @@
 
 <div class="nav-bar">
     <div class="nav-item active" onclick="goTab('rank')">
-        <span class="nav-icon">🏆</span><span class="nav-text">등급현황</span>
+        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 4h8v6a4 4 0 0 1-8 0V4Z"/><path d="M8 6H4v2a4 4 0 0 0 4 4M16 6h4v2a4 4 0 0 1-4 4M12 14v4M8 21h8M10 18h4"/></svg></span><span class="nav-text">등급현황</span>
     </div>
     <div class="nav-item" onclick="goTab('match')">
-        <span class="nav-icon">🎾</span><span class="nav-text">매치</span>
+        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6c3.5 3.5 3.5 9.3 0 12.8M18.4 5.6c-3.5 3.5-3.5 9.3 0 12.8"/></svg></span><span class="nav-text">매치</span>
     </div>
     <div class="nav-item" onclick="goTab('team')">
-        <span class="nav-icon">🛡️</span><span class="nav-text">단체전</span>
+        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M17 15a5 5 0 0 1 4 5"/></svg></span><span class="nav-text">단체전</span>
     </div>
     <div class="nav-item" onclick="goTab('history')">
-        <span class="nav-icon">📜</span><span class="nav-text">히스토리</span>
+        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6l3 2"/></svg></span><span class="nav-text">히스토리</span>
     </div>
     <div class="nav-item" onclick="window.allowPageLeave = true; location.href='../'">
-        <span class="nav-icon">💰</span><span style="font-size:.78rem;font-weight:700;">회계</span>
+        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span><span>회계</span>
     </div>
 </div>
 <div id="fullPhotoModal" class="modal-overlay" onclick="closeFullPhoto()">
@@ -5721,8 +5721,8 @@ window.playSequentialOrder = () => {
 </script>
 <div id="attendanceModal" class="modal-overlay" onclick="closeModal('attendanceModal')">
     <div class="modal" onclick="event.stopPropagation()" style="max-width:500px;">
-        <h3 style="text-align:center; margin-top:0; border-bottom:2px solid #FF9800; padding-bottom:10px; color:#E65100;">📋 대회 참석 체크</h3>
-        <div style="font-size:0.85rem; color:#666; text-align:center; margin-bottom:12px;">참석하는 회원을 체크하세요. 매치에서 주황색으로 표시됩니다.</div>
+        <h3 style="text-align:center; margin-top:0; border-bottom:1px solid #e8edf4; padding-bottom:10px; color:#192b46;">📋 대회 참석 체크</h3>
+        <div style="font-size:0.85rem; color:#666; text-align:center; margin-bottom:12px;">참석하는 회원을 체크하세요. 매치에서 파란색으로 표시됩니다.</div>
         <div style="display:flex; gap:5px; margin-bottom:12px;">
             <button class="btn-action" style="background:#FF9800; margin:0; padding:8px; font-size:0.85rem;" onclick="selectAllAttendance(true)">전체 선택</button>
             <button class="btn-action bg-gray" style="margin:0; padding:8px; font-size:0.85rem;" onclick="selectAllAttendance(false)">전체 해제</button>
@@ -6572,7 +6572,7 @@ window.editPlayerInMatch = (matchId, teamNum, pIdx, newName) => {
 <script id="compactHeaderV8Script">
 (function(){
   const LOGO_SRC = './icon-192.png';
-  const SUB_TITLE = 'MODERN TENNIS MATCH MANAGER';
+  const SUB_TITLE = '월례대회';
 
   function closeSheet(){
     const sheet = document.getElementById('mhcAdminSheet');
@@ -6841,5 +6841,6 @@ window.editPlayerInMatch = (matchId, teamNum, pIdx, newName) => {
 })();
 </script>
 
+<link rel="stylesheet" href="./match-finance.css?v=20261030_01">
 </body>
 </html>

@@ -1,0 +1,132 @@
+/* 월례대회 화면을 회계 앱(finance.css)과 같은 디자인으로 맞추는 표시 전용 층입니다. 기능은 index.html에 있습니다. */
+@media screen {
+    :root {
+        --court-green: #2563eb; --court-light: #3b7bf0; --court-dark: #172b4d;
+        --ball-yellow: #edf3ff; --ball-accent: #2563eb; --seed-color: #2563eb; --blue-mark: #2563eb; --danger: #d34857;
+        --bg-color: #f3f5f9; --text-main: #192b46; --text-sub: #617089;
+        --gm-primary: #172b4d; --gm-primary-dark: #172b4d; --gm-primary-light: #2563eb;
+        --gm-accent: #2563eb; --gm-accent-dark: #1d4fc4;
+        --gm-bg: #f3f5f9; --gm-bg2: #f3f5f9; --gm-panel: #fff; --gm-panel-2: #f7f9fd;
+        --gm-border: #e5ebf4; --gm-text: #192b46; --gm-sub: #617089;
+        --gm-shadow: 0 3px 16px rgba(24, 43, 77, .035); --gm-shadow-sm: none;
+        --shadow-sm: none; --shadow-md: 0 3px 16px rgba(24, 43, 77, .035); --shadow-lg: 0 3px 16px rgba(24, 43, 77, .035);
+    }
+    html, html body { background: #f3f5f9 !important; color: #192b46; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 { padding-bottom: calc(96px + env(safe-area-inset-bottom)) !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .container { max-width: 880px !important; background: none !important; }
+    button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #7aa7ff; outline-offset: 3px; }
+
+    /* 상단 */
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 header { background: #fff !important; color: #192b46 !important; border: 0 !important; border-bottom: 1px solid #e8edf4 !important; box-shadow: 0 2px 12px rgba(24, 43, 77, .03) !important; backdrop-filter: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mhc-logo { box-shadow: 0 0 0 1px #e5ebf4 !important; background: #fff !important; border-radius: 12px !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mhc-title { color: #192b46 !important; font-weight: 750 !important; letter-spacing: -.04em !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mhc-sub { color: #71809a !important; font-weight: 500 !important; letter-spacing: .02em !important; font-size: .68rem !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mhc-icon-btn { background: #f4f6fa !important; color: #465774 !important; border: 1px solid #e5eaf2 !important; border-radius: 10px !important; box-shadow: none !important; backdrop-filter: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mhc-status { background: #edf3ff !important; color: #2058c7 !important; border: 1px solid #dbe7ff !important; border-radius: 8px !important; font-weight: 650 !important; }
+
+    /* 카드와 제목 */
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .card { background: #fff !important; border: 1px solid #e8edf4 !important; border-radius: 18px !important; box-shadow: 0 3px 16px rgba(24, 43, 77, .035) !important; backdrop-filter: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .card::before, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .card::after { display: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .card-title { color: #192b46 !important; font-size: 1.12rem !important; font-weight: 750 !important; letter-spacing: -.03em; border-bottom: 1px solid #e8edf4 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .card-title::before, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .card-title::after { display: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .card-subtitle { color: #617089 !important; font-size: .84rem !important; }
+
+    /* 버튼 */
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .btn-action, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 button.btn-action, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .btn-rep, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .btn-print, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .gm-primary-btn { background: #2563eb !important; background-image: none !important; color: #fff !important; border: 1px solid transparent !important; border-radius: 11px !important; box-shadow: none !important; font-weight: 650 !important; filter: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .bg-green { background: #2563eb !important; color: #fff !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .bg-blue { background: #2563eb !important; color: #fff !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .bg-yellow, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .btn-action.bg-yellow { background: #edf3ff !important; color: #2058c7 !important; border-color: #dbe7ff !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .bg-gray, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .btn-action.bg-gray { background: #f4f6fa !important; color: #465774 !important; border-color: #e5eaf2 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .bg-red, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .btn-action.bg-red { background: #fff2f3 !important; color: #b13045 !important; border-color: #f4d5da !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .bg-teal, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .btn-action.bg-teal { background: #e9f6f5 !important; color: #137b76 !important; border-color: #cfeae8 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .bg-purple, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .btn-action.bg-purple { background: #f1f4f9 !important; color: #40516c !important; border-color: #e5eaf2 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mvp-btn { background: #f4f6fa !important; color: #465774 !important; border: 1px solid #e5eaf2 !important; border-radius: 9px !important; box-shadow: none !important; font-weight: 650 !important; font-size: .8rem !important; animation: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 #attendanceBtn { background: #edf3ff !important; color: #2058c7 !important; border-color: #dbe7ff !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 #page-match .btn-icon, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 #page-team .btn-icon, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .modal .btn-icon { background: #f4f6fa !important; color: #465774 !important; border: 1px solid #e5eaf2 !important; border-radius: 9px !important; box-shadow: none !important; }
+
+    /* 입력 */
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 input:not([type=checkbox]):not([type=radio]):not([type=file]), html body.modern-gimhae-ultra-v2.modern-header-clean-v8 select, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 textarea { background: #fafbfd !important; border: 1px solid #e1e7f0 !important; border-radius: 10px !important; color: #192b46 !important; box-shadow: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 input:focus, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 select:focus, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 textarea:focus { border-color: #2563eb !important; box-shadow: 0 0 0 3px #2563eb15 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 input[type=checkbox], html body.modern-gimhae-ultra-v2.modern-header-clean-v8 input[type=radio] { accent-color: #2563eb !important; }
+
+    /* 등급 현황판 */
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .tier-column { background: #fff !important; border: 1px solid #e5ebf4 !important; border-radius: 14px !important; box-shadow: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .tier-column .tier-header { background: #f5f8ff !important; color: #192b46 !important; border-bottom: 1px solid #e5ebf4 !important; font-weight: 750 !important; box-shadow: none !important; text-shadow: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .tier-column .tier-header * { color: inherit !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .player-list { background: #fff !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .player-card { background: #fff !important; border: 1px solid transparent !important; border-bottom-color: #eef2f7 !important; border-radius: 0 !important; box-shadow: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .player-card.attending { background: #edf3ff !important; border: 1px solid #c7daff !important; border-radius: 10px !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .player-card .p-name { color: #192b46 !important; font-weight: 500 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .player-card.attending .p-name { color: #2058c7 !important; font-weight: 700 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .select-chip.is-attending { background: #edf3ff !important; border: 1px solid #c7daff !important; color: #2058c7 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 #attendanceNotice { background: #edf3ff !important; border-color: #dbe7ff !important; color: #2058c7 !important; }
+
+    /* 매치 폴더와 카드 */
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .folder-item, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .folder-card-modern, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .match-card, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .match-card-modern, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .history-item-3d, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .preset-card, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .team-folder, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .ladder-group, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .member-card { background: #fff !important; background-image: none !important; border: 1px solid #e8edf4 !important; border-radius: 16px !important; box-shadow: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .folder-item::before, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .folder-card-modern::before, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .match-card::before, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .match-card-modern::before { display: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .folder-item.folder-guest { background: #f5f8ff !important; border-color: #dde7f7 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .folder-card-title, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .match-card-title { color: #192b46 !important; font-weight: 750 !important; letter-spacing: -.03em; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .folder-card-badge, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .match-badge { background: #eef2f8 !important; color: #52637d !important; border: 0 !important; border-radius: 7px !important; font-weight: 600 !important; box-shadow: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .folder-mini-btn { background: #edf3ff !important; background-image: none !important; color: #2058c7 !important; border: 1px solid #dbe7ff !important; border-radius: 9px !important; box-shadow: none !important; font-weight: 650 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .folder-delete-btn, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .match-delete-btn { background: #fff2f3 !important; border: 1px solid #f4d5da !important; border-radius: 9px !important; box-shadow: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .folder-stat, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .match-meta-pill { background: #f8fafd !important; border: 1px solid #edf1f7 !important; border-radius: 12px !important; box-shadow: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .folder-stat span, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .match-meta-pill span { color: #617089 !important; font-weight: 500 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .folder-stat strong, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .match-meta-pill strong { color: #192b46 !important; font-variant-numeric: tabular-nums; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .folder-card-footer { border-top-color: #edf1f7 !important; color: #2058c7 !important; font-weight: 650 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .folder-arrow { color: #2058c7 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .match-open-btn { background: #edf3ff !important; color: #2058c7 !important; border-color: #dbe7ff !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .match-order-btn { background: #f4f6fa !important; color: #465774 !important; border: 1px solid #e5eaf2 !important; box-shadow: none !important; }
+
+    /* 표 */
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .result-table, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .report-table, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mvp-full-table { border-color: #e8edf4 !important; font-variant-numeric: tabular-nums; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .result-table th, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .report-table th, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mvp-full-table th { background: #f7f9fd !important; color: #52637d !important; border-color: #e8edf4 !important; font-weight: 650 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .result-table td, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .report-table td, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mvp-full-table td { border-color: #eef2f7 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mobile-table-wrap { border-color: #e8edf4 !important; box-shadow: none !important; }
+
+    /* 전체 현황과 팝업 */
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .modal-overlay { background: #14233d66 !important; backdrop-filter: blur(3px) !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .modal { background: #fff !important; border: 1px solid #e5ebf4 !important; border-radius: 20px !important; box-shadow: 0 24px 100px #13274635 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 #memberManagerModal div[style*="background"] { background: #f7f9fd !important; border-color: #e8edf4 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .match-overview-sheet { background: #fff !important; border-radius: 20px !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .match-overview-sumcard, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .match-overview-item { background: #f8fafd !important; border: 1px solid #edf1f7 !important; box-shadow: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .chart-3d-box { background: #f8fafd !important; border: 1px solid #edf1f7 !important; border-radius: 14px !important; box-shadow: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .stat-badge-3d { background: #f8fafd !important; border: 1px solid #edf1f7 !important; box-shadow: none !important; }
+
+    /* 화면 안에 직접 지정된 색상 */
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .card[style], html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .card[style*="linear-gradient"] { background: #fff !important; border: 1px solid #e8edf4 !important; box-shadow: 0 3px 16px rgba(24, 43, 77, .035) !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 #page-team .card > div > div[style*="box-shadow"] { border: 1px solid #edf1f7 !important; box-shadow: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 #teamFilterBar { background: #f8fafd !important; border: 1px solid #edf1f7 !important; border-radius: 12px !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .stat-badge-3d { border: 1px solid #edf1f7 !important; border-radius: 14px !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .stat-badge-3d::before, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .stat-badge-3d::after { display: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 #mvpModal div[style*="#fff"][style*="background"], html body.modern-gimhae-ultra-v2.modern-header-clean-v8 #mvpModal div[style*="#FFF"][style*="background"] { background: #f7f9fd !important; border-color: #e8edf4 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 #mvpModal span[style*="#f57f17"] { color: #192b46 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .hist-badge { background: none !important; box-shadow: none !important; border: 0 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .hist-badge-up { color: #d34857 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .hist-badge-down { color: #2563eb !important; }
+
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .seed-section { background: #f7f9fd !important; border: 1px solid #e8edf4 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 #match-setup [style*="#f57f17"] { color: #192b46 !important; }
+
+    /* 관리자 메뉴 */
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mhc-sheet, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mhc-sheet-panel { background: #fff !important; color: #192b46 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mhc-menu-item { background: #f8fafd !important; border: 1px solid #edf1f7 !important; border-radius: 14px !important; color: #192b46 !important; box-shadow: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mhc-menu-name { color: #192b46 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mhc-menu-desc { color: #617089 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mhc-menu-item.danger { background: #fff2f3 !important; border-color: #f4d5da !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .mhc-menu-item.danger .mhc-menu-name { color: #b13045 !important; }
+
+    /* 하단 메뉴 */
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .nav-bar { left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100% !important; max-width: 832px !important; margin: 0 auto !important; transform: none !important; padding: 10px 8px calc(10px + env(safe-area-inset-bottom)) !important; background: #fff !important; border: 1px solid #e5ebf4 !important; border-bottom: 0 !important; border-radius: 20px 20px 0 0 !important; box-shadow: 0 -4px 24px #172b4d06 !important; backdrop-filter: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .nav-item { background: none !important; border: 0 !important; border-radius: 12px !important; padding: 8px 0 !important; min-height: 0 !important; color: #6d7b91 !important; box-shadow: none !important; transform: none !important; font-size: .73rem !important; font-weight: 500 !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .nav-item.active { background: #edf3ff !important; color: #2563eb !important; font-weight: 700 !important; box-shadow: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .nav-item .nav-text, html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .nav-item > span:last-child { color: inherit !important; font-weight: inherit !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .nav-item .nav-text::before { font-size: .73rem !important; color: inherit !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .nav-item > span:not(.nav-icon):not(.nav-text) { font-size: .73rem !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .nav-item .tab-count { display: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .nav-icon { display: block !important; width: 23px !important; height: 23px !important; margin: 0 auto 5px !important; filter: none !important; transform: none !important; }
+    html body.modern-gimhae-ultra-v2.modern-header-clean-v8 .nav-icon svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+    @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+}
