@@ -119,7 +119,7 @@
         ".read": "auth != null && auth.token.email == 'canyone2@naver.com'",
         "$uid": {
           ".read": "auth != null && auth.uid == $uid",
-          ".write": "(auth != null && auth.token.email == 'canyone2@naver.com') || ((auth != null && auth.uid == $uid) && auth.token.email_verified == true && (!data.exists() || data.child('status').val() == 'rejected' || data.child('status').val() == 'revoked') && newData.child('status').val() == 'pending' && newData.child('email').val() == auth.token.email && !newData.hasChild('reviewedAt') && !newData.hasChild('reviewedBy'))",
+          ".write": "(auth != null && auth.token.email == 'canyone2@naver.com') || ((auth != null && auth.uid == $uid) && (!data.exists() || data.child('status').val() == 'rejected' || data.child('status').val() == 'revoked') && newData.child('status').val() == 'pending' && newData.child('email').val() == auth.token.email && !newData.hasChild('reviewedAt') && !newData.hasChild('reviewedBy'))",
           ".validate": "newData.hasChildren(['uid','email','name','status','requestedAt']) && newData.child('uid').val() == $uid",
           "uid": {
             ".validate": "newData.val() == $uid"

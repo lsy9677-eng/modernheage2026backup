@@ -23,13 +23,15 @@ test('Revoked and pending accounts cannot manage the ledger', () => {
     assert.equal(canManage('owner'), true);
     assert.equal(canManage('treasurer'), true);
 });
-test('Only verified accounts without an active request can apply', () => {
+test('Accounts can apply before verification without receiving edit rights', () => {
     assert.equal(canRequest(user, null, 'pending'), true);
     assert.equal(canRequest(user, {status: 'rejected'}, 'pending'), true);
     assert.equal(canRequest(user, {status: 'revoked'}, 'pending'), true);
     assert.equal(canRequest(user, {status: 'pending'}, 'pending'), false);
     assert.equal(canRequest(user, {status: 'approved'}, 'treasurer'), false);
-    assert.equal(canRequest({...user, emailVerified:false}, null, 'pending'), false);
+    assert.equal(canRequest({...user, emailVerified:false}, null, 'pending'), true);
+    assert.equal(resolveRole({...user,emailVerified:false},grant),'pending');
+    assert.equal(canRequest(null,null,'pending'),false);
 });
 
 // Exercise the actual rule expressions with DataSnapshot-shaped fixtures.
@@ -72,14 +74,14 @@ test('Only owner can grant, revoke or read all account permissions', () => {
     assert.equal(rules['.read'],false);
     assert.equal(rules['.write'],false);
 });
-test('Applicants can only submit their own verified pending request', () => {
+test('Applicants can only submit their own pending request; verification still gates editing', () => {
     const write = rules.accountAccess.requests.$uid['.write'];
     const request = {uid:user.uid,email:user.email,name:'Next treasurer',status:'pending',requestedAt:Date.now()};
     const input = {newData:new Snapshot(request)};
     assert.equal(evaluate(write,input), true);
     assert.equal(evaluate(write,{...input,auth:null}), false);
     assert.equal(evaluate(write,{...input,$uid:'other'}), false);
-    assert.equal(evaluate(write,{...input,auth:{...auth,token:{...auth.token,email_verified:false}}}), false);
+    assert.equal(evaluate(write,{...input,auth:{...auth,token:{...auth.token,email_verified:false}}}), true);
     assert.equal(evaluate(write,{newData:new Snapshot({...request,status:'approved'})}), false);
     assert.equal(evaluate(write,{newData:new Snapshot({...request,email:'other@example.com'})}), false);
     assert.equal(evaluate(write,{...input,data:new Snapshot({...request,status:'approved'})}), false);

@@ -2,10 +2,19 @@
 @media screen {
     [hidden] { display: none !important; }
     .owner-only { display: none !important; }
-    .app-container[data-section="settings"] header .total-asset-box,
-    .app-container[data-section="settings"] header .stats-row,
-    .app-container[data-section="settings"] #bankInfoArea { display: none !important; }
-    .app-container[data-section="settings"] .header-top { margin-bottom: 0; }
+    html.account-dialog-open { overflow: hidden; }
+    .account-dialog { width: min(520px, calc(100% - 28px)); max-height: min(88dvh, 900px); padding: 24px; margin: auto; border: 1px solid #e2e8f2; border-radius: 22px; color: #192b46; background: #fff; box-shadow: 0 24px 100px #13274635; overscroll-behavior: contain; }
+    .account-dialog::backdrop { background: #10213c80; backdrop-filter: blur(4px); }
+    .settings-dialog { width: min(640px, calc(100% - 28px)); background: #f6f8fc; }
+    .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+    .dialog-heading h2 { margin: 5px 0 0; font-size: 1.35rem; letter-spacing: -.04em; }
+    .dialog-eyebrow { font-size: .65rem; font-weight: 700; letter-spacing: .1em; color: #71809a; }
+    .dialog-close { flex-shrink: 0; width: 38px; height: 38px; border: 1px solid #e1e7f0; border-radius: 12px; background: #fff; color: #617089; font-size: 1.6rem; line-height: 1; }
+    .account-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; background: #f1f4f9; padding: 5px; border-radius: 12px; margin-bottom: 18px; }
+    .account-tabs button { border: 0; border-radius: 9px; background: transparent; color: #617089; padding: 12px 6px; font-size: .85rem; font-weight: 650; }
+    .account-tabs button[aria-selected="true"] { background: #fff; color: #2563eb; box-shadow: 0 2px 7px #172b4d0a; }
+    .request-status-card { background: #f5f8ff; border: 1px solid #dde7f7; border-radius: 14px; margin-top: 20px; padding: 16px; }
+    .account-trigger { background: #edf3ff; color: #2058c7; border-color: #dbe7ff; }
     .settings-trigger { display: inline-flex; align-items: center; gap: 7px; }
     .settings-trigger svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
     .settings-heading { font-size: 1rem; font-weight: 750; margin-bottom: 14px; }
@@ -15,9 +24,9 @@
     .account-role { background: #edf3ff; color: #2058c7; border-radius: 7px; padding: 5px 9px; font-weight: 650; font-size: .75rem; }
     .access-message { margin-bottom: 18px; border-radius: 12px; padding: 14px 16px; background: #edf6ff; color: #2058a7; border: 1px solid #d4e5fb; font-size: .85rem; line-height: 1.6; }
     .access-message.error { background: #fff2f3; color: #b13045; border-color: #f4d5da; }
-    #page-settings form label { display: block; font-size: .78rem; color: #52637d; margin: 12px 0 6px; }
-    #page-settings form { max-width: 520px; }
-    #page-settings button:disabled { cursor: wait; opacity: .55; }
+    #accountAccessRoot form label { display: block; font-size: .78rem; color: #52637d; margin: 12px 0 6px; }
+    #accountAccessRoot form { max-width: 520px; }
+    #accountAccessRoot button:disabled { cursor: wait; opacity: .55; }
     .access-request-row { padding: 18px 0; border-bottom: 1px solid #e8edf4; }
     .access-request-row:last-child { border-bottom: 0; }
     :root {
@@ -108,6 +117,8 @@
     .modal { background: #fff; border-color: #e5ebf4; border-radius: 20px; }
     .modal-wrap { background: #14233d66; backdrop-filter: blur(3px); }
     @media (max-width: 600px) {
+        .header-top .ver-tag { display: none; }
+        .account-dialog { padding: 20px; max-height: 90dvh; }
         header { margin: 12px 12px 0; padding: 18px; border-radius: 20px; }
         .header-top { display: flex; align-items: center; margin-bottom: 20px; gap: 12px; }
         .club-title { font-size: 1.1rem; margin-bottom: 0; gap: 8px; }

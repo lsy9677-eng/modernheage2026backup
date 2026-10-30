@@ -13,5 +13,5 @@ export function canManage(role) {
 }
 
 export function canRequest(user, request, role) {
-    return !!user?.emailVerified && role === 'pending' && (!request || ['rejected', 'revoked'].includes(request.status));
+    return !!user?.uid && role === 'pending' && (!request || ['rejected', 'revoked'].includes(request.status));
 }

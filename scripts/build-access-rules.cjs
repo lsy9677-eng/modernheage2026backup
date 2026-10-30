@@ -42,7 +42,7 @@ const rules = {
             '.read': owner,
             '$uid': {
                 '.read': self,
-                '.write': `(${owner}) || ((${self}) && auth.token.email_verified == true && (!data.exists() || data.child('status').val() == 'rejected' || data.child('status').val() == 'revoked') && newData.child('status').val() == 'pending' && newData.child('email').val() == auth.token.email && !newData.hasChild('reviewedAt') && !newData.hasChild('reviewedBy'))`,
+                '.write': `(${owner}) || ((${self}) && (!data.exists() || data.child('status').val() == 'rejected' || data.child('status').val() == 'revoked') && newData.child('status').val() == 'pending' && newData.child('email').val() == auth.token.email && !newData.hasChild('reviewedAt') && !newData.hasChild('reviewedBy'))`,
                 '.validate': "newData.hasChildren(['uid','email','name','status','requestedAt']) && newData.child('uid').val() == $uid",
                 uid: { '.validate': 'newData.val() == $uid' },
                 email: { '.validate': `newData.isString() && newData.val().length <= 254 && ((${owner}) || newData.val() == auth.token.email)` },
