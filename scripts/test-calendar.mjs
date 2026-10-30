@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCalendarFile, googleCalendarUrl, calendarOptions, validCalendarEvent } from '../calendar-format.js';
+import { buildCalendarFile, googleCalendarUrl, calendarOptions, validCalendarEvent, birthdayCalendarEvents } from '../calendar-format.js';
 
 const event = {id:123,date:'2027-01-01',title:'모던테니스 신년 모임'};
 const now = new Date('2026-10-30T10:00:00Z');
@@ -58,4 +58,26 @@ test('Malformed saved preferences recover to usable defaults', () => {
     assert.equal(calendarOptions({startTime:'25:99'}).startTime,'09:00');
     assert.equal(calendarOptions(null).startTime,'09:00');
     assert.equal(calendarOptions({dayBefore:false}).dayBefore,false);
+});
+test('Birthdays use the next occurrence without exporting age or birth year',()=>{
+    const members=[{id:1,name:'김회원',birthday:'1980-01-10'},{id:2,name:'이회원',birthday:'1975-11-03'},{id:3,name:'잘못된 날짜',birthday:'2000-02-30'}];
+    const birthdays=birthdayCalendarEvents(members,'2026-10-30');
+    assert.deepEqual(birthdays.map(event=>event.date),['2027-01-10','2026-11-03']);
+    assert(birthdays.every(event=>event.isBirthday));assert(!JSON.stringify(birthdays).includes('1980'));
+    assert.equal(birthdayCalendarEvents([{id:4,name:'윤년',birthday:'2000-02-29'}],'2026-10-30')[0].date,'2028-02-29');
+});
+test('Birthday alarm is opt-in and independent of normal event alarms',()=>{
+    const birthday=birthdayCalendarEvents([{id:1,name:'회원',birthday:'1980-01-10'}],'2026-10-30')[0];
+    assert(!buildCalendarFile([birthday],{},now).includes('BEGIN:VALARM'));
+    assert(buildCalendarFile([birthday],{birthdayAlerts:true,birthdaySameDay:true},now).includes('TRIGGER:PT0S'));
+    assert(!buildCalendarFile([birthday],{birthdayAlerts:false,birthdaySameDay:true},now).includes('BEGIN:VALARM'));
+    const mixed=buildCalendarFile([event,birthday],{dayBefore:true,sameDay:true,birthdayAlerts:false},now);
+    assert.equal((mixed.match(/BEGIN:VALARM/g)||[]).length,2);
+});
+test('Recurring birthdays preserve Korea date even before 9am and have a stable identity',()=>{
+    const birthday={id:'birthday-1',date:'2027-03-01',title:'회원 생일',isBirthday:true};
+    const file=buildCalendarFile([birthday],{startTime:'00:30'},now);
+    assert(file.includes('TZID:Asia/Seoul'));assert(file.includes('DTSTART;TZID=Asia/Seoul:20270301T003000'));assert(file.includes('RRULE:FREQ=YEARLY'));
+    const next=buildCalendarFile([{...birthday,date:'2028-03-01'}],{},now);
+    assert.equal(file.match(/UID:([^\r]+)/)[1],next.match(/UID:([^\r]+)/)[1]);
 });
