@@ -57,8 +57,11 @@ export function createSettingsPage({ preview = false } = {}) {
             </form>
             <div id="staffList" aria-live="polite">계정을 불러오는 중입니다.</div>
         </div>
+        <div class="card admin-only"><div class="settings-heading">회비·계좌 설정</div><p class="settings-description">월 회비 금액, 입금 계좌와 문자 알림을 관리합니다.</p><div class="settings-actions">
+            <button type="button" class="btn-sub" data-dismiss-settings onclick="openFeeSettings('fees')">회비 설정</button><button type="button" class="btn-sub" data-dismiss-settings onclick="openFeeSettings('bank')">계좌 설정</button><button type="button" class="btn-sub" data-dismiss-settings onclick="openFeeSettings('sms')">문자 알림 설정</button>
+        </div></div>
         <div class="card admin-only"><div class="settings-heading">회계 운영</div><div class="settings-actions">
-            <button class="btn-sub" data-dismiss-settings onclick="openFeeSettings()">회비·계좌·문자 설정</button><button class="btn-sub" data-dismiss-settings onclick="openMonthEndCheck()">월말 점검·마감</button><button class="btn-sub" data-dismiss-settings onclick="openChangeHistory()">변경 이력</button><button class="btn-sub" data-dismiss-settings onclick="goTab('report')">결산·감사 보고서</button>
+            <button class="btn-sub" data-dismiss-settings onclick="openMonthEndCheck()">월말 점검·마감</button><button class="btn-sub" data-dismiss-settings onclick="openChangeHistory()">변경 이력</button><button class="btn-sub" data-dismiss-settings onclick="goTab('report')">결산·감사 보고서</button>
         </div></div>
         <div class="card admin-only"><div class="settings-heading">백업 및 복구</div><p class="settings-description">전체 복구와 안전 복사 관리는 관리자 전용입니다.</p><div class="settings-actions">
             <button class="btn-sub" data-dismiss-settings onclick="exportData()">백업 다운로드</button><button class="btn-sub owner-only" data-dismiss-settings onclick="createSafetyBaseline()">안전 복사</button><button class="btn-sub owner-only" data-dismiss-settings onclick="openRestorePointManager()">자동 복구점</button><button class="btn-sub owner-only" data-dismiss-settings onclick="document.getElementById('loadFile').click()">백업 파일로 복구</button>

@@ -1,4 +1,4 @@
-import { createSettingsPage } from './settings-view.js?v=20261030_05';
+import { createSettingsPage } from './settings-view.js?v=20261030_07';
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
 import {
     getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,

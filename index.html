@@ -983,7 +983,6 @@ th:first-child, td:first-child {
         <div class="section-header">
             <div class="section-title"><span>👥 회원 명부</span></div>
             <div style="display:flex; gap:5px;">
-                <button class="btn-sub admin-only" style="background:#6c5ce7; color:white; border:none;" onclick="openFeeSettings()">⚙️회비설정</button>
                 <button class="btn-sub admin-only" style="background:var(--primary); color:white; border:none;" onclick="openModal()">+ 추가</button>
                 <button class="btn-sub" style="background:var(--accent); color:white; border:none;" onclick="openMemberReport()">💾 다른 형식의 파일로 저장하기</button>
             </div>
@@ -1204,7 +1203,7 @@ th:first-child, td:first-child {
     
     <div class="modal-wrap" id="feeSettingsModal">
         <div class="modal">
-            <h3 style="margin:0 0 14px 0;">⚙️ 월 회비 설정</h3>
+            <h3 id="feeSettingsTitle" style="margin:0 0 14px 0;">회비 설정</h3>
 
             <div class="card" style="padding:14px; margin-bottom:14px;">
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
@@ -1382,7 +1381,7 @@ th:first-child, td:first-child {
 
 <script type="module">
     import { visibleRoster, applyMemberLifecycle, watchRosterYear } from './roster-policy.js?v=20261030_01';
-    import { installAccountAccess } from './account-access.js?v=20261030_05';
+    import { installAccountAccess } from './account-access.js?v=20261030_07';
     import { toPublicAccountMembers } from './member-privacy.js?v=20261030_05';
     import { installCalendarReminders } from './calendar-reminders.js?v=20261030_02';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -3851,8 +3850,18 @@ if (window.excludeInactive) {
         return { amount: count * monthlyFee, months };
     }
 
-    window.openFeeSettings = () => {
+    window.openFeeSettings = (section = 'fees') => {
  if(!window.isAdmin) return;
+        const sections = {
+            fees: {title:'회비 설정', input:'fee_reg'},
+            bank: {title:'계좌 설정', input:'setting_bankAccount'},
+            sms: {title:'문자 알림 설정', input:'sms_enabled'}
+        };
+        if(!sections[section]) section = 'fees';
+        document.getElementById('feeSettingsTitle').textContent = sections[section].title;
+        Object.entries(sections).forEach(([key, value]) => {
+            document.getElementById(value.input).closest('.card').hidden = key !== section;
+        });
         document.getElementById('feeSettingsModal').style.display = 'flex';
         // 기존 회비 값 세팅
         document.getElementById('fee_reg').value = currentFees['남성'];
@@ -3867,6 +3876,8 @@ if (window.excludeInactive) {
         document.getElementById('sms_enabled').checked = !!sms.enabled;
         document.getElementById('sms_tpl_dues').value = sms.templateDues;
         document.getElementById('sms_tpl_don').value = sms.templateDonation;
+        document.getElementById('feeSettingsModal').querySelector('.modal').scrollTop = 0;
+        document.getElementById(sections[section].input).focus();
     }
 
 window.saveFeeSettings = () => {
