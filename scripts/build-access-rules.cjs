@@ -58,7 +58,20 @@ const rules = {
         },
         requests: {
             '.read': owner,
-            '$uid': { '.read': self, '.write': owner }
+            '$uid': {
+                '.read': self,
+                '.write': `(${owner}) || ((${self}) && (!data.exists() || data.child('status').val() == 'pending' || data.child('status').val() == 'rejected' || data.child('status').val() == 'revoked') && newData.child('status').val() == 'pending' && newData.child('email').val() == auth.token.email && !newData.hasChild('reviewedAt') && !newData.hasChild('reviewedBy'))`,
+                '.validate': "newData.hasChildren(['uid','email','name','status','requestedAt']) && newData.child('uid').val() == $uid",
+                uid: { '.validate': 'newData.val() == $uid' },
+                email: { '.validate': 'newData.isString() && newData.val().length <= 254' },
+                name: { '.validate': 'newData.isString() && newData.val().length > 0 && newData.val().length <= 80' },
+                status: { '.validate': "newData.val() == 'pending' || newData.val() == 'approved' || newData.val() == 'rejected' || newData.val() == 'revoked'" },
+                requestedRole: { '.validate': "newData.val() == 'treasurer' || newData.val() == 'director'" },
+                requestedAt: { '.validate': 'newData.isNumber() && newData.val() > 0 && newData.val() <= now' },
+                reviewedAt: { '.validate': `(${owner}) && newData.isNumber() && newData.val() <= now` },
+                reviewedBy: { '.validate': `(${owner}) && newData.val() == auth.uid` },
+                '$other': { '.validate': false }
+            }
         }
     }
 };

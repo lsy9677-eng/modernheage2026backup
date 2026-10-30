@@ -1,4 +1,4 @@
-import { createSettingsPage } from './settings-view.js?v=20261030_04';
+import { createSettingsPage } from './settings-view.js?v=20261030_05';
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
 import {
     getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
@@ -6,22 +6,23 @@ import {
     updatePassword, reauthenticateWithCredential, EmailAuthProvider
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 import { ref, get, set, onValue, update, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
-import { OWNER_EMAIL, ACCESS_ROOT, STAFF_ROLES, resolveRole, canManage } from './access-policy.js?v=20261030_04';
+import { OWNER_EMAIL, ACCESS_ROOT, STAFF_ROLES, resolveRole, canManage, canRequest } from './access-policy.js?v=20261030_05';
 
 const STAFF_APP_NAME = 'staff-provisioning';
 
 export function installAccountAccess({ app, auth, db, refreshUI, onManagerReady, onManagerChange }) {
     const page = createSettingsPage();
     const el = id => document.getElementById(id);
-    let role = 'visitor';
-    let generation = 0, subscriptions = [], busy = false;
-    const roleLabels = { visitor: '방문자', pending: '권한 없는 계정', owner: '관리자 · 개발자', treasurer: '총무', director: '경기이사' };
+    let role = 'visitor', request = null, grant = null;
+    let generation = 0, subscriptions = [], busy = false, requestReady = false, mode = 'login';
+    const roleLabels = { visitor: '방문자', pending: '승인 전 계정', owner: '관리자 · 개발자', treasurer: '총무', director: '경기이사' };
     const roleDescriptions = {
-        owner: '관리자 계정입니다. 회계와 월례대회를 모두 관리하고, 설정에서 총무·경기이사 계정을 만들거나 권한을 회수할 수 있습니다.',
+        owner: '관리자 계정입니다. 회계와 월례대회를 모두 관리하고, 설정에서 권한 신청을 승인하거나 총무·경기이사 계정을 만들 수 있습니다.',
         treasurer: '총무 권한으로 거래·회원·영수증·일정과 결산을 관리할 수 있습니다. 월례대회는 보기만 할 수 있습니다.',
         director: '경기이사 권한으로 월례대회의 매치·등급·회원을 관리할 수 있습니다. 회계는 보기만 할 수 있습니다.',
-        pending: '이 계정에는 편집 권한이 없습니다. 권한이 필요하면 관리자에게 문의해주세요.'
+        pending: '아직 편집 권한이 없는 계정입니다. 아래에서 신청 상태를 확인할 수 있습니다.'
     };
+    const statuses = { pending: '승인 대기', approved: '승인됨', rejected: '반려됨 · 다시 신청할 수 있습니다.', revoked: '권한 회수됨 · 다시 신청할 수 있습니다.' };
     const tell = (message, error = false) => {
         const box = el('settingsDialog').open ? el('settingsMessage') : el('accessMessage');
         box.hidden = false;
@@ -37,6 +38,10 @@ export function installAccountAccess({ app, auth, db, refreshUI, onManagerReady,
         if (!el(id).open) el(id).showModal();
         syncScrollLock();
     }
+    function setMode(next) {
+        mode = next;
+        render();
+    }
     for (const id of ['accountDialog', 'settingsDialog']) {
         el(id).addEventListener('close', syncScrollLock);
         el(id).addEventListener('click', event => {
@@ -47,13 +52,22 @@ export function installAccountAccess({ app, auth, db, refreshUI, onManagerReady,
     }
     page.querySelectorAll('[data-close-dialog]').forEach(button => button.addEventListener('click', () => el(button.dataset.closeDialog).close()));
     page.querySelectorAll('[data-dismiss-settings]').forEach(button => button.addEventListener('click', () => el('settingsDialog').close(), {capture:true}));
-    window.openAccountDialog = () => { render(); openDialog('accountDialog'); };
+    el('loginModeTab').addEventListener('click', () => setMode('login'));
+    el('requestModeTab').addEventListener('click', () => setMode('request'));
+    for(const id of ['loginModeTab', 'requestModeTab']) el(id).addEventListener('keydown', event => {
+        if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+        event.preventDefault();
+        const requestTab = event.key === 'End' || (event.key !== 'Home' && id === 'loginModeTab');
+        setMode(requestTab ? 'request' : 'login');
+        el(requestTab ? 'requestModeTab' : 'loginModeTab').focus();
+    });
+    window.openAccountDialog = (nextMode = 'login') => { setMode(nextMode === 'request' ? 'request' : 'login'); openDialog('accountDialog'); };
     window.openAppSettings = () => { render(); openDialog('settingsDialog'); };
     window.closeAccountPopups = () => { el('accountDialog').close(); el('settingsDialog').close(); syncScrollLock(); };
     el('settingsOpenAccount').addEventListener('click', () => window.openAccountDialog());
     function errorMessage(error) {
         const messages = {
-            'auth/email-already-in-use': '이미 등록된 이메일입니다. 아래 목록에서 권한을 복구하거나, Firebase 콘솔에서 기존 계정을 확인해주세요.',
+            'auth/email-already-in-use': '이미 등록된 이메일입니다. 아래 목록을 확인하거나, 로그인 후 신청해주세요.',
             'auth/invalid-email': '이메일 형식을 확인해주세요.',
             'auth/invalid-credential': '이메일 또는 비밀번호를 확인해주세요.',
             'auth/wrong-password': '현재 비밀번호를 확인해주세요.',
@@ -62,7 +76,7 @@ export function installAccountAccess({ app, auth, db, refreshUI, onManagerReady,
             'auth/requires-recent-login': '다시 로그인한 뒤 시도해주세요.',
             'auth/network-request-failed': '인터넷 연결을 확인해주세요.'
         };
-        return messages[error.code] || (/permission/i.test(String(error.code || '') + String(error.message)) ? '권한 저장이 거부되었습니다. 관리자 계정인지 확인해주세요.' : '처리하지 못했습니다. 인터넷 연결을 확인하고 다시 시도해주세요.');
+        return messages[error.code] || (/permission/i.test(String(error.code || '') + String(error.message)) ? '신청 또는 권한 저장이 거부되었습니다. 관리자에게 문의해주세요.' : '처리하지 못했습니다. 인터넷 연결을 확인하고 다시 시도해주세요.');
     }
     async function perform(action) {
         if (busy) return;
@@ -89,19 +103,39 @@ export function installAccountAccess({ app, auth, db, refreshUI, onManagerReady,
         render();
         if (!wasManager && window.isAdmin) onManagerReady();
     }
+    function requestStatusText(user) {
+        if (!requestReady) return '서버에 저장된 신청 상태를 확인하고 있습니다.';
+        if (grant?.role === 'revoked') return '권한이 회수되었습니다. 필요하면 관리자에게 문의해주세요.';
+        if (!request) return '접수된 신청이 없습니다. 아래에서 신청해주세요.';
+        const wanted = roleLabels[request.requestedRole];
+        const date = request.requestedAt ? new Intl.DateTimeFormat('ko-KR', {timeZone:'Asia/Seoul',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(request.requestedAt)) : '';
+        const state = request.status === 'pending' ? '접수 완료 · 승인 대기' : statuses[request.status] || request.status;
+        return `${wanted ? wanted + ' 신청 · ' : ''}${state}${date ? ' · ' + date : ''}.`;
+    }
     function render() {
         const user = auth.currentUser;
-        el('accountDialogTitle').textContent = user ? '내 계정' : '로그인';
-        el('loginPanel').hidden = !!user;
+        const applying = mode === 'request' && !user;
+        el('accountDialogTitle').textContent = user ? '내 계정' : applying ? '권한 신청' : '로그인';
+        el('accountModeTabs').hidden = !!user;
+        el('loginModeTab').setAttribute('aria-selected', String(!applying));
+        el('requestModeTab').setAttribute('aria-selected', String(applying));
+        el('loginModeTab').tabIndex = applying ? -1 : 0;
+        el('requestModeTab').tabIndex = applying ? 0 : -1;
+        el('loginPanel').hidden = applying || !!user;
+        el('requestPanel').hidden = !applying;
         el('accountRole').textContent = roleLabels[role];
         el('accountEmail').textContent = user?.email || '로그인하지 않았습니다.';
         el('settingsAccountRole').textContent = roleLabels[role];
         el('settingsAccountEmail').textContent = user?.email || '로그인하지 않았습니다.';
         const headerLogin = el('btnAccount');
-        if (headerLogin) { headerLogin.textContent = user ? '내 계정' : '로그인'; headerLogin.setAttribute('aria-label', user ? '내 계정' : '로그인'); }
+        if (headerLogin) { headerLogin.textContent = user ? '내 계정' : '로그인'; headerLogin.setAttribute('aria-label', user ? '내 계정 및 신청 상태' : '로그인 또는 권한 신청'); }
         el('signedInActions').hidden = !user;
         el('accountPasswordCard').hidden = !user;
         el('accountDescription').textContent = roleDescriptions[role] || '';
+        const showRequest = !!user && role === 'pending';
+        el('roleRequestCard').hidden = !showRequest;
+        el('roleRequestForm').hidden = !requestReady || grant?.role === 'revoked' || !canRequest(user, request, role);
+        if (user) el('myRequestStatus').textContent = requestStatusText(user);
         el('accessApprovalCard').hidden = !window.isOwner;
         page.querySelectorAll('form button').forEach(button => button.disabled = busy);
     }
@@ -109,9 +143,56 @@ export function installAccountAccess({ app, auth, db, refreshUI, onManagerReady,
     window.toggleAdminLogin = () => window.openAccountDialog();
     window.changeAdminPassword = () => { window.openAppSettings(); el('accountPasswordCard').scrollIntoView({ behavior: 'smooth' }); };
 
+    async function saveRequest(user, name, requestedRole) {
+        if (user.email === OWNER_EMAIL) { tell('현재 계정은 관리자입니다. 별도 신청 없이 사용할 수 있습니다.'); return false; }
+        const path = ref(db, `${ACCESS_ROOT}/requests/${user.uid}`);
+        const existing = (await get(path)).val();
+        if (existing && ['pending', 'approved'].includes(existing.status)) {
+            request = existing; requestReady = true; render();
+            tell(existing.status === 'pending' ? '이미 접수된 신청이 있습니다. 관리자 승인을 기다려주세요.' : '이미 승인된 신청입니다.');
+            return false;
+        }
+        await set(path, {uid:user.uid, email:user.email, name, requestedRole, status:'pending', requestedAt:serverTimestamp()});
+        const confirmed = (await get(path)).val();
+        if (!confirmed || confirmed.uid !== user.uid || confirmed.email !== user.email || confirmed.status !== 'pending') throw new Error('신청 저장을 확인하지 못했습니다.');
+        request = confirmed; requestReady = true; render();
+        return true;
+    }
+
     el('accountLoginForm').addEventListener('submit', event => {
         event.preventDefault();
         perform(async () => { await signInWithEmailAndPassword(auth, el('accountLoginEmail').value.trim(), el('accountLoginPassword').value); el('accountLoginPassword').value = ''; tell('로그인했습니다. 계정 권한을 확인하고 있습니다.'); });
+    });
+    el('showSignup').addEventListener('click', () => setMode('request'));
+    el('cancelSignup').addEventListener('click', () => setMode('login'));
+    el('accountSignupForm').addEventListener('submit', event => {
+        event.preventDefault();
+        if (el('accountSignupPassword').value !== el('accountSignupConfirm').value) return tell('비밀번호가 일치하지 않습니다.', true);
+        perform(async () => {
+            const name = el('accountSignupName').value.trim();
+            const requestedRole = el('accountSignupRole').value;
+            if (!name || !STAFF_ROLES.includes(requestedRole)) return tell('이름과 신청 역할을 확인해주세요.', true);
+            const email = el('accountSignupEmail').value.trim();
+            const password = el('accountSignupPassword').value;
+            let result;
+            try { result = await createUserWithEmailAndPassword(auth, email, password); }
+            catch (error) {
+                if (error.code !== 'auth/email-already-in-use') throw error;
+                result = await signInWithEmailAndPassword(auth, email, password);
+            }
+            if (await saveRequest(result.user, name, requestedRole)) tell('신청을 접수했습니다. 관리자가 승인하면 바로 사용할 수 있습니다.');
+            el('accountSignupForm').reset();
+        });
+    });
+    el('roleRequestForm').addEventListener('submit', event => {
+        event.preventDefault();
+        perform(async () => {
+            const user = auth.currentUser;
+            if (!canRequest(user, request, role)) return tell('이미 접수되었거나 승인된 신청인지 확인해주세요.', true);
+            const name = el('requestName').value.trim(), requestedRole = el('requestRole').value;
+            if (!name || !STAFF_ROLES.includes(requestedRole)) return tell('이름과 신청 역할을 확인해주세요.', true);
+            if (await saveRequest(user, name, requestedRole)) tell('신청을 접수했습니다. 관리자가 승인하면 바로 사용할 수 있습니다.');
+        });
     });
     el('resetAccountPassword').addEventListener('click', () => perform(async () => {
         const email = el('accountLoginEmail').value.trim();
@@ -121,7 +202,8 @@ export function installAccountAccess({ app, auth, db, refreshUI, onManagerReady,
     }));
     el('btnLogin').addEventListener('click', () => perform(async () => {
         await signOut(auth);
-        ['accountLoginForm','changeAccountPasswordForm'].forEach(id => el(id).reset());
+        ['accountLoginForm','accountSignupForm','roleRequestForm','changeAccountPasswordForm'].forEach(id => el(id).reset());
+        setMode('login');
         tell('로그아웃했습니다.');
     }));
     el('changeAccountPasswordForm').addEventListener('submit', event => {
@@ -195,7 +277,7 @@ export function installAccountAccess({ app, auth, db, refreshUI, onManagerReady,
         const list = el('staffList');
         list.replaceChildren();
         const entries = Object.entries(roles).sort((a, b) => a[1].name.localeCompare(b[1].name));
-        if (!entries.length) { list.textContent = '아직 만든 계정이 없습니다.'; return; }
+        if (!entries.length) { list.textContent = '아직 등록된 계정이 없습니다.'; return; }
         for (const [uid, item] of entries) {
             const actions = item.role === 'revoked'
                 ? [actionButton('총무로 복구', changeRole(uid, item, 'treasurer', '총무로 복구')), actionButton('경기이사로 복구', changeRole(uid, item, 'director', '경기이사로 복구'))]
@@ -207,19 +289,19 @@ export function installAccountAccess({ app, auth, db, refreshUI, onManagerReady,
             list.append(accountRow(item, roleLabels[item.role] || '권한 회수됨', actions));
         }
     }
-    // 공개 신청을 닫기 전에 접수된 건만 표시합니다.
     function renderRequests(requests) {
         const list = el('accessRequestsList');
         list.replaceChildren();
         for (const [uid, item] of Object.entries(requests).filter(([, value]) => value.status === 'pending')) {
             const decide = (status, nextRole, label) => async () => {
-                if (!confirm(`${item.name} (${item.email})님의 이전 신청을 ${label}하시겠습니까?`)) return;
+                if (!confirm(`${item.name} (${item.email})님의 신청을 ${label}하시겠습니까?`)) return;
                 const changes = { [`${ACCESS_ROOT}/requests/${uid}`]: { ...item, status, reviewedAt: serverTimestamp(), reviewedBy: auth.currentUser.uid } };
                 if (nextRole) Object.assign(changes, roleRecord(uid, nextRole, item.email, item.name));
                 await update(ref(db), changes);
                 tell(`${item.name}님의 신청을 ${label}했습니다.`);
             };
-            list.append(accountRow(item, '이전 신청 · 승인 대기', [
+            const wanted = roleLabels[item.requestedRole] ? `${roleLabels[item.requestedRole]} 신청` : '권한 신청';
+            list.append(accountRow(item, `${wanted} · 승인 대기`, [
                 actionButton('총무로 승인', decide('approved', 'treasurer', '총무로 승인')),
                 actionButton('경기이사로 승인', decide('approved', 'director', '경기이사로 승인')),
                 actionButton('반려', decide('rejected', null, '반려'))
@@ -229,9 +311,14 @@ export function installAccountAccess({ app, auth, db, refreshUI, onManagerReady,
     function watchUser(user) {
         const currentGeneration = ++generation;
         subscriptions.forEach(stop => stop()); subscriptions = [];
+        grant = null; request = null; requestReady = false;
         applyRole(resolveRole(user, null));
         if (!user) return;
         const fail = error => { if (currentGeneration === generation) tell(errorMessage(error), true); };
+        subscriptions.push(onValue(ref(db, `${ACCESS_ROOT}/requests/${user.uid}`), snapshot => {
+            if (currentGeneration !== generation) return;
+            request = snapshot.val(); requestReady = true; render();
+        }, fail));
         if (user.email === OWNER_EMAIL) {
             subscriptions.push(onValue(ref(db, `${ACCESS_ROOT}/roles`), snapshot => {
                 if (currentGeneration === generation) renderStaff(snapshot.val() || {});
@@ -242,7 +329,7 @@ export function installAccountAccess({ app, auth, db, refreshUI, onManagerReady,
         } else {
             subscriptions.push(onValue(ref(db, `${ACCESS_ROOT}/roles/${user.uid}`), snapshot => {
                 if (currentGeneration !== generation) return;
-                applyRole(resolveRole(user, snapshot.val()));
+                grant = snapshot.val(); applyRole(resolveRole(user, grant));
             }, error => { if (currentGeneration === generation) { applyRole('pending'); fail(error); } }));
         }
     }

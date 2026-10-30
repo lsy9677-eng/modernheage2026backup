@@ -16,3 +16,7 @@ export function canManage(role) {
 export function canManageMatch(role) {
     return role === 'owner' || role === 'director';
 }
+
+export function canRequest(user, request, role) {
+    return !!user?.uid && role === 'pending' && (!request || ['rejected', 'revoked'].includes(request.status));
+}
