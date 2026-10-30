@@ -1883,42 +1883,42 @@
 </div>
 
 <div id="page-team" class="container page-section">
-    <div class="card" style="background: linear-gradient(145deg, #ffffff, #f0f4f8); border:none; box-shadow: 6px 6px 16px #d1d9e6, -4px -4px 12px #ffffff; padding-bottom:5px;">
+    <div class="card finance-team-overview">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
-            <span>📊 단체전 분석 센터</span>
+            <div><span>단체전 현황</span><div class="finance-section-description">출전 기록과 부서별 성적을 한눈에 확인하세요.</div></div>
             <select id="teamStatsYearFilter" onchange="syncStatsYear(this.value)" style="font-size:0.8rem; padding:4px 8px; border-radius:8px; border:1px solid #ddd; background:#fff;">
                 <option value="all">전체</option>
             </select>
         </div>
         
-        <div style="display:flex; height:185px; gap:10px; margin-bottom:12px;">
-            <div style="width:50%; position:relative; padding:8px; background:white; border-radius:14px; box-shadow: 3px 3px 8px #d1d9e6, -2px -2px 6px #fff;">
+        <div class="finance-team-charts">
+            <div class="finance-chart-card">
+                <div class="finance-chart-title">부서별 입상 성적</div>
                 <canvas id="teamWinRateChart"></canvas>
-                <div style="text-align:center; font-size:0.72rem; margin-top:3px; font-weight:700; color:#6366f1; letter-spacing:0.3px;">🏅 부서별 입상력</div>
             </div>
-            <div style="width:50%; position:relative; padding:8px; background:white; border-radius:14px; box-shadow: 3px 3px 8px #d1d9e6, -2px -2px 6px #fff;">
+            <div class="finance-chart-card">
+                <div class="finance-chart-title">출전 횟수 TOP 6</div>
                 <canvas id="teamPartiChart"></canvas>
-                <div style="text-align:center; font-size:0.72rem; margin-top:3px; font-weight:700; color:#f97316; letter-spacing:0.3px;">🔥 출전왕 Top 6</div>
             </div>
         </div>
 
         <div id="teamFunStats" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:8px;">
             <div class="stat-badge-3d">
-                <div class="sb-icon">🔥</div>
+                <div class="sb-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg></div>
                 <div class="sb-content">
                     <div class="sb-label">총 출전</div>
                     <div class="sb-val" id="statTotalGames">0</div>
                 </div>
             </div>
             <div class="stat-badge-3d">
-                <div class="sb-icon">🤝</div>
+                <div class="sb-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><path d="M2 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 15a5 5 0 0 1 4 5"/></svg></div>
                 <div class="sb-content">
                     <div class="sb-label">최강 듀오</div>
                     <div class="sb-val" id="statBestDuo">-</div>
                 </div>
             </div>
             <div class="stat-badge-3d" style="grid-column: span 2;">
-                <div class="sb-icon">👑</div>
+                <div class="sb-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1Z"/></svg></div>
                 <div class="sb-content">
                     <div class="sb-label">성적 기여왕</div>
                     <div class="sb-val" id="statMVP">-</div>
@@ -1929,7 +1929,7 @@
     <div class="card">
         <div class="card-title">
   <div id="teamListTitle" style="width:100%; display:flex; justify-content:space-between; align-items:center;">
-                <span>🛡️ 대회 일정 및 기록</span>
+                <span>대회 일정 및 기록</span>
                 <div style="display:flex; gap:5px;">
                     <button class="btn-action bg-purple admin-only" style="width:auto; padding:5px 10px; margin:0; font-size:0.8rem;" onclick="openPresetManager()">⚙️ 프리셋 설정</button>
                     <button class="btn-action bg-blue admin-only" style="width:auto; padding:5px 10px; margin:0; font-size:0.8rem;" onclick="openTeamEditor()">+ 등록</button>
@@ -1964,16 +1964,16 @@
 </div>
 
 <div id="teamEditorModal" class="modal-overlay">
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:600px;">
+    <div class="modal finance-team-editor" onclick="event.stopPropagation()" style="max-width:600px;">
         <h3 id="teamEditorTitle" style="text-align:center; margin-top:0;">대회 설정</h3>
         
-        <div style="background:#e3f2fd; padding:10px; border-radius:10px; margin-bottom:15px;">
+        <div class="finance-editor-basics">
             <label style="font-weight:bold;">기본 정보</label>
             <input type="text" id="tEditName" class="input-full" placeholder="대회명 (예: 2024 전반기 장유연합회)">
             <input type="date" id="tEditDate" class="input-full">
             <input type="text" id="tEditResult" class="input-full" placeholder="종합 결과 (예: 금배 우승, 은배 8강)">
             
-            <label style="font-weight:bold; margin-top:10px; display:block;">📋 프리셋 불러오기 (6개)</label>
+            <label style="font-weight:bold; margin-top:10px; display:block;">저장된 대회 구성 불러오기</label>
             <div id="presetButtonsArea" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:5px;">
                 </div>
         </div>
@@ -1982,7 +1982,7 @@
         
         <button class="btn-action bg-yellow" onclick="addDivisionSlot()">+ 부서(팀) 수동 추가</button>
         
-        <div style="display:flex; gap:5px; margin-top:15px;">
+        <div class="finance-editor-footer" style="display:flex; gap:5px; margin-top:15px;">
             <button class="btn-action bg-green" onclick="saveTeamTournament()">💾 저장하기</button>
             <button class="btn-action bg-red" onclick="deleteTeamTournament()" id="btnDelTeam" style="display:none;">삭제</button>
             <button class="btn-action bg-gray" onclick="closeModal('teamEditorModal')">닫기</button>
@@ -2018,8 +2018,8 @@
 
 <div id="page-history" class="container page-section">
     <div class="card">
-        <div class="card-title">📜 등급 변경 및 대회 기록</div>
-        <div class="card-subtitle">모던 테니스 클럽의 발자취</div>
+        <div class="card-title">등급 변경 및 대회 기록</div>
+        <div class="card-subtitle">대회별 등급 변동과 상세 성적을 확인하세요.</div>
         <div id="historyListArea"><div style="text-align:center; padding:30px; color:#aaa;">기록 없음 ☁️</div></div>
     </div>
 </div>
@@ -3308,12 +3308,12 @@ if (window.isAdmin) {
 
     function renderHistoryTab() {
         const list = document.getElementById('historyListArea');
-        if(!window.rankingData.history.length) return list.innerHTML = '<div style="text-align:center; padding:30px;">기록 없음</div>';
+        if(!window.rankingData.history.length) return list.innerHTML = '<div class="finance-empty-state"><strong>아직 저장된 기록이 없습니다</strong><span>대회 승강 결과를 저장하면 이곳에서 확인할 수 있습니다.</span></div>';
         
         list.innerHTML = [...window.rankingData.history].reverse().map((h, i) => `
-            <div class="card" style="padding:15px; cursor:pointer;" onclick="openHistoryDetail(${window.rankingData.history.length-1-i})">
-                <div style="font-weight:bold;">${h.title} <span style="font-weight:normal; font-size:0.8rem; color:#888;">(${h.dateString})</span></div>
-                <div style="font-size:0.85rem; margin-top:5px;">${h.changes.length}명 변동 / 결과표 보기</div>
+            <div class="card finance-history-card" onclick="openHistoryDetail(${window.rankingData.history.length-1-i})">
+                <div class="finance-history-heading"><div><div class="finance-history-date">${h.dateString}</div><div class="finance-history-title">${h.title}</div></div><span class="finance-history-link">상세 보기 ›</span></div>
+                <div class="finance-history-summary">등급 변동 <strong>${h.changes.length}명</strong></div>
                 
                 <div class="hist-changes-container">
                   ${h.changes.map(c => {
@@ -3731,7 +3731,7 @@ window.deleteMatch = (e, id) => {
             const group = allSorted.filter(s => s.tier === t);
             if(!group.length) return;
             
-            html += `<h4 style="margin:10px 0 5px; color:var(--court-dark); border-bottom:1px solid #eee;">${t}조 결과</h4>
+            html += `<section class="finance-result-section"><h4>${t}조 결과</h4><div class="finance-table-scroll" tabindex="0" role="region" aria-label="${t}조 결과표">
                      <table class="result-table"><thead><tr><th>순위</th><th>이름</th><th>승점</th><th>득실</th><th>승</th><th>무</th><th>패</th></tr></thead><tbody>`;
             
             group.forEach((p, index) => {
@@ -3753,7 +3753,7 @@ window.deleteMatch = (e, id) => {
                     <td>${p.losses||0}</td>
                  </tr>`;
             });
-            html += `</tbody></table>`;
+            html += `</tbody></table></div></section>`;
         });
 
         document.getElementById('detailContent').innerHTML = html;
@@ -4246,20 +4246,15 @@ window.mvpDeletedKeys = []; // 자동항목 삭제 키 목록
         }
 
         if(list.length === 0) {
-            listDiv.innerHTML = '<div style="text-align:center; padding:30px; color:#aaa;">조건에 맞는 대회 기록이 없습니다.</div>';
+            listDiv.innerHTML = '<div class="finance-empty-state"><strong>조건에 맞는 대회가 없습니다</strong><span>연도를 변경하거나 다른 검색어로 찾아보세요.</span></div>';
             return;
         }
 
         listDiv.innerHTML = list.map(t => {
-            return `<div class="team-folder" onclick="openTeamDetail('${t.id}')">
-                        <div style="display:flex; align-items:center;">
-                            <span style="font-size:1.8rem; margin-right:10px;">📁</span>
-                            <div>
-                                <div style="font-weight:bold; font-size:1rem; color:#333;">${t.name}</div>
-                                <div style="font-size:0.8rem; color:#666;">${t.date} <span style="margin:0 5px; color:#ddd;">|</span> ${t.result || '진행중'}</div>
-                            </div>
-                        </div>
-                        <span style="font-size:1.2rem; color:#ccc;">›</span>
+            return `<div class="team-folder finance-team-event" onclick="openTeamDetail('${t.id}')">
+                        <div class="finance-event-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 3h8v7a4 4 0 0 1-8 0V3ZM8 5H4v3a4 4 0 0 0 4 4M16 5h4v3a4 4 0 0 1-4 4M12 14v6M8 21h8"/></svg></div>
+                        <div class="finance-event-copy"><div class="finance-event-date">${t.date}</div><div class="finance-event-name">${t.name}</div><span class="finance-result-badge">${t.result || '진행중'}</span></div>
+                        <span class="finance-event-arrow" aria-hidden="true">›</span>
                     </div>`;
         }).join('');
         updateAdminUI(); 
@@ -4347,7 +4342,7 @@ window.mvpDeletedKeys = []; // 자동항목 삭제 키 목록
         const ctxParti = document.getElementById('teamPartiChart').getContext('2d');
         if(window.chartInstances.teamParti) window.chartInstances.teamParti.destroy();
 
-        const barColors = ['rgba(255,170,0,0.92)','rgba(99,102,241,0.85)','rgba(239,68,68,0.8)','rgba(16,185,129,0.8)','rgba(59,130,246,0.8)','rgba(167,139,250,0.8)'];
+        const barColors = ['#2563eb','#3b7bf0','#5c91f4','#7ca9f7','#9dbff9','#bdd4fc'];
         window.chartInstances.teamParti = new Chart(ctxParti, {
             type: 'bar',
             data: {
@@ -4383,7 +4378,7 @@ window.mvpDeletedKeys = []; // 자동항목 삭제 키 목록
             ctxWin.font = '11px sans-serif'; ctxWin.fillStyle = '#aaa'; ctxWin.textAlign = 'center';
             ctxWin.fillText('입상 기록 없음', ctxWin.canvas.width/2, ctxWin.canvas.height/2);
         } else {
-            const palette = ['#6366f1','#f59e0b','#10b981','#ef4444','#3b82f6','#a78bfa'];
+            const palette = ['#2563eb','#172b4d','#137b76','#7ca9f7','#8195b3','#bed1ec'];
             window.chartInstances.teamWin = new Chart(ctxWin, {
                 type: 'doughnut',
                 data: {
@@ -4468,7 +4463,7 @@ window.openTeamDetail = (id) => {
             }).join('');
             
             const resHtml = (d.reserves && d.reserves.some(r=>r)) ? `<div style="font-size:0.8rem; margin-top:5px; color:#666;">예비: ${d.reserves.filter(r=>r).join(', ')}</div>` : '';
-            return `<div class="div-box"><div class="div-title"><span>${d.name}</span><span style="font-size:0.9rem;">${d.teamResult||'-'}</span></div><div>${pairsHtml}</div>${resHtml}</div>`;
+            return `<div class="div-box finance-division-card"><div class="div-title"><span>${d.name}</span><span class="finance-result-badge">${d.teamResult||'결과 미등록'}</span></div><div>${pairsHtml}</div>${resHtml}</div>`;
         }).join('');
     }
     window.closeTeamDetail = () => { renderTeamTab(); }
@@ -4532,8 +4527,8 @@ function renderDivisionInput(container, data, idx) {
 
         // [수정] 승패 선택 삭제, readonly 삭제, onclick -> ondblclick 변경
         const html = `
-        <div class="div-box" id="${divId}">
-            <div style="display:flex; gap:5px; margin-bottom:5px;">
+        <div class="div-box finance-division-editor" id="${divId}">
+            <div class="finance-division-editor-heading" style="display:flex; gap:5px; margin-bottom:5px;">
 <input type="text" class="input-full d-name" value="${data.name}" placeholder="부서명 (예: 금배)" style="flex:1; margin:0;" oninput="updateOverallTeamResult()">
                 <select class="input-full d-type" style="width:80px; margin:0;" onchange="adjustPairs('${divId}', this.value)">
                     <option value="3복식" ${data.type==='3복식'?'selected':''}>3복</option>
@@ -6838,6 +6833,6 @@ window.editPlayerInMatch = (matchId, teamNum, pIdx, newName) => {
 })();
 </script>
 
-<link rel="stylesheet" href="./match-finance.css?v=20261030_01">
+<link rel="stylesheet" href="./match-finance.css?v=20261030_02">
 </body>
 </html>
