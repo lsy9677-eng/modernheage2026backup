@@ -1,5 +1,5 @@
 // modern-tennis-accounting SW - network first (no HTML caching)
-const CACHE_NAME = 'modern-tennis-accounting-v20260122_055702';
+const CACHE_NAME = 'modern-tennis-accounting-v20261030_finance_01';
 const ASSETS = [
   './manifest.json',
   './modern-192.png',

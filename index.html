@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes, viewport-fit=cover">
-    <title>모던테니스 회계 [Online] 🎾</title>
+    <title>모던테니스 | 회계 관리</title>
   
 
 <link rel="manifest" href="./manifest.json?v=20240520_01"> <link rel="icon" type="image/png" href="./modern-192.png?v=20240520_02">
@@ -682,6 +682,8 @@ th:first-child, td:first-child {
         .backup-health-bar .bh-open { flex-shrink:0; font-weight:800; color:#636e72; }
 
 </style>
+    <meta name="theme-color" content="#172e52">
+    <link rel="stylesheet" href="./finance.css?v=20261030_01">
 </head>
 <body>
 
@@ -694,8 +696,9 @@ th:first-child, td:first-child {
     <header>
         <div class="header-top">
             <div class="club-title">
-                모던 테니스 <span class="ver-tag">Online</span>
-                <span class="signature-ver">상영ver</span>
+                <span class="brand-mark" aria-hidden="true">M</span>
+                <span class="brand-copy">모던테니스<small>회계 관리</small></span>
+                <span class="ver-tag">ONLINE</span>
             </div>
             
             <div class="backup-btns">
@@ -705,7 +708,7 @@ th:first-child, td:first-child {
 
     <button class="btn-backup admin-only" onclick="document.getElementById('loadFile').click()">📂 복구</button>
     <button class="btn-save-exit admin-only" onclick="saveAndExit()">저장하고 나가기 🚪</button>
-    <button id="btnLogin" class="admin-login-btn" onclick="toggleAdminLogin()">🔒</button>
+    <button id="btnLogin" class="admin-login-btn" aria-label="관리자 로그인 또는 로그아웃" title="관리자 로그인 또는 로그아웃" onclick="toggleAdminLogin()">🔒</button>
     <input type="file" id="loadFile" accept=".json" style="display:none" onchange="importData(this)">
 </div>
         </div>
@@ -727,7 +730,7 @@ th:first-child, td:first-child {
 
     <div id="page-ledger" class="page active">
         <div class="section-header">
-            <div class="section-title"><span>📝 수입/지출 관리</span></div>
+            <div class="section-title"><span>거래 내역</span></div>
             <div style="display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-end;">
                 <button class="btn-sub admin-only" style="background:#e8fff8; color:#007f63; border:1px solid #a7ead8;" onclick="openRestorePointManager()">⏱ 자동복구점</button>
                 <button class="btn-sub admin-only" style="background:#fff7e6; color:#a75b00; border:1px solid #ffd59a;" onclick="openMonthEndCheck()">✅ 월말점검</button>
@@ -745,7 +748,7 @@ th:first-child, td:first-child {
 
         <div class="monthly-overview-wrap" id="monthlyOverviewWrap">
             <div class="monthly-overview-head">
-                <div class="monthly-overview-title">📌 이번 달 한눈에 보기</div>
+                <div class="monthly-overview-title">이번 달 회계 요약</div>
                 <div class="monthly-overview-period" id="monthlyOverviewPeriod"></div>
             </div>
             <div class="monthly-overview-grid">
@@ -1103,13 +1106,13 @@ th:first-child, td:first-child {
 
             <div id="allEventsContainer"></div> </div>
         </div>
-    <div class="nav-bar">
-        <div class="nav-item active" onclick="goTab('ledger', this)"><span class="nav-icon">📒</span>장부</div>
-        <div class="nav-item" onclick="goTab('members', this)"><span class="nav-icon">👥</span>명부</div>
-        <div class="nav-item" onclick="goTab('analysis', this)"><span class="nav-icon">📊</span>미납</div>
-        <div class="nav-item" onclick="goTab('receipts', this)"><span class="nav-icon">🧾</span>영수증</div>
-        <div class="nav-item" onclick="goTab('calendar', this)"><span class="nav-icon">📅</span>일정</div>
-    </div>
+    <nav class="nav-bar" aria-label="주요 메뉴">
+        <button type="button" class="nav-item active" onclick="goTab('ledger', this)"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>장부</button>
+        <button type="button" class="nav-item" onclick="goTab('members', this)"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M17 15a5 5 0 0 1 4 5"/></svg></span>명부</button>
+        <button type="button" class="nav-item" onclick="goTab('analysis', this)"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6l3 2"/></svg></span>미납</button>
+        <button type="button" class="nav-item" onclick="goTab('receipts', this)"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span>영수증</button>
+        <button type="button" class="nav-item" onclick="goTab('calendar', this)"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4M17 3v4M3 11h18M8 15h2M14 15h2"/></svg></span>일정</button>
+    </nav>
     
     <div class="fab admin-only" onclick="goTab('ledger', document.querySelector('.nav-item')); document.getElementById('tAmt').focus()">+</div>
     <button id="btnBulkSMS" class="bulk-sms-btn" onclick="sendBulkSMS()">📩 선택 문자발송</button>
